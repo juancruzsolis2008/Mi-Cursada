@@ -62,6 +62,7 @@ auth.onAuthStateChanged(user => {
     state = { materias: [], pendientes: [], plan: [], carrera: {} };
     $('#app-shell').classList.add('hidden');
     $('#login-screen').classList.remove('hidden');
+    $$('dialog[open]').forEach(d => d.close());
   }
 });
 
@@ -624,7 +625,7 @@ function renderProgreso(){
   const cuatriLabel = { '1':'1er cuatrimestre', '2':'2do cuatrimestre', 'anual':'Anual' };
 
   $('#plan-years').innerHTML = anios.map(anio => {
-    const items = porAnio[anio].sort((a,b) => String(a.cuatrimestre).localeCompare(String(b.cuatrimestre)) || a.nombre.localeCompare(b.nombre));
+    const items = porAnio[anio].sort((a,b) => String(a.cuatrimestre).localeCompare(String(b.cuatrimestre)) || ((a.orden ?? 1e9) - (b.orden ?? 1e9)) || a.nombre.localeCompare(b.nombre));
     const aprobEnAnio = items.filter(i => i.estado==='aprobada').length;
     return `
       <div class="plan-year" data-anio="${anio}">
@@ -661,9 +662,9 @@ function planRowHtml(p, cuatriLabel){
     <div class="plan-row ${p.estado==='aprobada'?'is-aprobada':''} ${locked?'is-locked':''}">
       <button class="plan-tachar ${p.estado==='aprobada'?'is-aprobada':''}" data-id="${p.id}" title="Marcar aprobada">✓</button>
       <div class="plan-row-name">
-        ${escapeHtml(p.nombre)}
+        ${escapeHtml(p.nombre)}${p.codigo ? ` <span class="plan-codigo">${escapeHtml(p.codigo)}</span>` : ''}
         <div class="plan-strike"></div>
-        <div class="mini-item-meta">${cuatriLabel[p.cuatrimestre]||''}${locked?` · 🔒 requiere: ${pendientes.map(x=>escapeHtml(x.nombre)).join(', ')}`:''}</div>
+        <div class="mini-item-meta">${cuatriLabel[p.cuatrimestre]||''}${locked?` · 🔒 requiere: ${pendientes.map(x=>escapeHtml(x.nombre)).join(', ')}`:''}${(!p.correlativas||!p.correlativas.length) && p.correlativasTexto ? ` · ref. PDF: ${escapeHtml(p.correlativasTexto)}` : ''}</div>
       </div>
       <select class="plan-estado-select" data-id="${p.id}">
         ${ESTADOS.map(e => `<option value="${e.v}" ${p.estado===e.v?'selected':''}>${e.label}</option>`).join('')}
@@ -829,14 +830,26 @@ function parsePlanLines(lines){
       nombreText = '';
     }
 
+    // separa código (y CG/Hs, que se descartan) del resto de correlativas
+    let codigo = '', correlativasTexto = detalleText;
+    const detalleMatch = detalleText.match(/^([A-ZÑ]{2,10}\d{2,5}[A-Z]?|-)\s*(?:\d{1,2}(?:[.,]\d)?\s*)?(?:\d{2,4}\s*)?(.*)$/);
+    if(detalleMatch){
+      codigo = detalleMatch[1] === '-' ? '' : detalleMatch[1];
+      correlativasTexto = (detalleMatch[2] || '').trim();
+    }
+
     if(nombreText && anioActual){
-      const row = { nombre: nombreText, anio: anioActual, cuatrimestre: cuatLabel, detalle: detalleText, incluir: true };
+      const row = {
+        nombre: nombreText, anio: anioActual, cuatrimestre: cuatLabel,
+        codigo, correlativasTexto, incluir: true,
+      };
       rows.push(row);
       lastRow = row;
     } else if(detalleText && lastRow){
-      lastRow.detalle = (lastRow.detalle + ' ' + detalleText).trim();
+      lastRow.correlativasTexto = (lastRow.correlativasTexto + ' ' + detalleText).trim();
     }
   }
+  rows.forEach((r, i) => { r.orden = i; });
   return rows;
 }
 
@@ -881,7 +894,7 @@ function renderImportPreview(){
       <input type="text" class="input import-row-nombre" data-idx="${i}" value="${escapeAttr(r.nombre)}">
       <select class="input select import-row-anio" data-idx="${i}">${anioOpts}</select>
       <select class="input select import-row-cuat" data-idx="${i}">${cuatOpts}</select>
-      ${r.detalle ? `<div class="import-row-hint" title="${escapeAttr(r.detalle)}">${escapeHtml(r.detalle)}</div>` : ''}
+      ${(r.codigo || r.correlativasTexto) ? `<div class="import-row-hint" title="${escapeAttr([r.codigo, r.correlativasTexto].filter(Boolean).join(' — '))}">${r.codigo ? `<strong>${escapeHtml(r.codigo)}</strong> — ` : ''}${escapeHtml(r.correlativasTexto || '')}</div>` : ''}
     </div>
   `).join('');
   importPdfState.rows.forEach((r, i) => {
@@ -906,6 +919,10 @@ function renderImportPreview(){
 
 $('#import-confirm-btn').addEventListener('click', async () => {
   if(!importPdfState) return;
+  if(!currentUser){
+    $('#import-pdf-status').textContent = 'Se cerró tu sesión. Cerrá este cuadro, volvé a iniciar sesión y probá de nuevo.';
+    return;
+  }
   const seleccion = importPdfState.rows.filter(r => r.incluir && r.nombre.trim());
   if(!seleccion.length) return;
   const btn = $('#import-confirm-btn');
@@ -920,6 +937,9 @@ $('#import-confirm-btn').addEventListener('click', async () => {
       estado: 'no_cursada',
       nota: null,
       correlativas: [],
+      codigo: r.codigo || null,
+      correlativasTexto: r.correlativasTexto || null,
+      orden: r.orden,
     })));
     $('#modal-import-plan').close();
   } catch(err){
