@@ -739,7 +739,7 @@ async function pdfToLines(file){
     let cur = null;
     items.forEach(it => {
       if(!cur || Math.abs(cur.y - it.y) > 3){
-        cur = { y: it.y, items: [] };
+        cur = { y: it.y, page: p, items: [] };
         lines.push(cur);
       }
       cur.items.push(it);
@@ -783,14 +783,23 @@ function detectColumns(lines){
 
 const ANIO_PALABRAS = { primer:1, primero:1, segundo:2, tercer:3, tercero:3, cuarto:4, quinto:5, sexto:6, septimo:7, octavo:8 };
 
+// el número de cuatrimestre suele imprimirse en una celda combinada que
+// abarca varias filas, centrada verticalmente en ese grupo — no en la
+// primera fila. Por eso el cuatrimestre no se "arrastra" fila por fila:
+// se junta la posición de cada marcador encontrado y, al final, cada
+// materia queda con el cuatrimestre de su marcador más cercano.
 function parsePlanLines(lines){
   const cols = detectColumns(lines);
-  const rows = [];
+  const provisional = [];
+  const markerRaw = {};      // anio -> [{docY, digit}] (números de la columna "Cuat")
+  const markerResolved = {}; // anio -> [{docY, label}] (ya como '1' | '2' | 'anual')
   let anioActual = null;
-  let cuatLabel = '1';
-  let seenCuat = [];
   let lastRow = null;
   let stopped = false;
+
+  const docY = line => line.page * 100000 - line.y;
+  const addRaw = (anio, y, digit) => { (markerRaw[anio] = markerRaw[anio] || []).push({ y, digit }); };
+  const addResolved = (anio, y, label) => { (markerResolved[anio] = markerResolved[anio] || []).push({ y, label }); };
 
   for(const line of lines){
     if(stopped) continue;
@@ -803,14 +812,14 @@ function parsePlanLines(lines){
     const anioMatch = fullText.match(/^(PRIMER|SEGUNDO|TERCER|CUARTO|QUINTO|SEXTO|S[EÉ]PTIMO|OCTAVO)\s+A[ÑN]O\b/i);
     if(anioMatch){
       anioActual = ANIO_PALABRAS[normTxt(anioMatch[1])] || (anioActual||0)+1;
-      seenCuat = []; cuatLabel = '1'; lastRow = null;
+      lastRow = null;
       continue;
     }
     if(/CR[EÉ]DITOS|GRADO (OBLIGATORIOS|OPTATIVAS|PPS|PSC)|REQUISITOS ACAD[EÉ]MIC|SUJETO A VERIFICACI|^(Cu|at|Asignatura|C[oó]d\.?|CG|Hs\.?|Correlativas)$/i.test(fullText)) continue;
 
-    if(/\b1\s*(er|ro)?\.?\s*cuatr|cuatrimestre\s*1\b/i.test(fullText) && fullText.length < 40){ cuatLabel = '1'; lastRow = null; continue; }
-    if(/\b2\s*(do)?\.?\s*cuatr|cuatrimestre\s*2\b/i.test(fullText) && fullText.length < 40){ cuatLabel = '2'; lastRow = null; continue; }
-    if(/^anual$/i.test(fullText)){ cuatLabel = 'anual'; lastRow = null; continue; }
+    if(/\b1\s*(er|ro)?\.?\s*cuatr|cuatrimestre\s*1\b/i.test(fullText) && fullText.length < 40){ addResolved(anioActual, docY(line), '1'); lastRow = null; continue; }
+    if(/\b2\s*(do)?\.?\s*cuatr|cuatrimestre\s*2\b/i.test(fullText) && fullText.length < 40){ addResolved(anioActual, docY(line), '2'); lastRow = null; continue; }
+    if(/^anual$/i.test(fullText)){ addResolved(anioActual, docY(line), 'anual'); lastRow = null; continue; }
 
     let nombreText = line.items.filter(i => i.x < cols.nombreEndX)
       .map(i => i.str).join(' ').replace(/\s+/g,' ').trim();
@@ -819,14 +828,10 @@ function parsePlanLines(lines){
 
     const cuatMarker = nombreText.match(/^(\d{1,2})\s+(\S.*)$/);
     if(cuatMarker){
-      const n = cuatMarker[1];
-      if(!seenCuat.includes(n)) seenCuat.push(n);
-      cuatLabel = seenCuat.indexOf(n) % 2 === 0 ? '1' : '2';
+      addRaw(anioActual, docY(line), cuatMarker[1]);
       nombreText = cuatMarker[2];
     } else if(/^\d{1,2}$/.test(nombreText)){
-      const n = nombreText;
-      if(!seenCuat.includes(n)) seenCuat.push(n);
-      cuatLabel = seenCuat.indexOf(n) % 2 === 0 ? '1' : '2';
+      addRaw(anioActual, docY(line), nombreText);
       nombreText = '';
     }
 
@@ -839,18 +844,37 @@ function parsePlanLines(lines){
     }
 
     if(nombreText && anioActual){
-      const row = {
-        nombre: nombreText, anio: anioActual, cuatrimestre: cuatLabel,
-        codigo, correlativasTexto, incluir: true,
-      };
-      rows.push(row);
+      const row = { nombre: nombreText, anio: anioActual, docY: docY(line), codigo, correlativasTexto, incluir: true };
+      provisional.push(row);
       lastRow = row;
     } else if(detalleText && lastRow){
       lastRow.correlativasTexto = (lastRow.correlativasTexto + ' ' + detalleText).trim();
     }
   }
-  rows.forEach((r, i) => { r.orden = i; });
-  return rows;
+
+  // resuelve los marcadores numéricos: el primer valor distinto visto en el
+  // año es cuatrimestre 1, el segundo es cuatrimestre 2 (alterna) — el propio
+  // valor puede ser una numeración global (1..10) y no siempre 1/2.
+  Object.keys(markerRaw).forEach(anio => {
+    const seenVals = [];
+    markerRaw[anio].forEach(m => { if(!seenVals.includes(m.digit)) seenVals.push(m.digit); });
+    markerRaw[anio].forEach(m => addResolved(Number(anio), m.y, seenVals.indexOf(m.digit) % 2 === 0 ? '1' : '2'));
+  });
+
+  provisional.forEach(row => {
+    const marks = markerResolved[row.anio];
+    if(!marks || !marks.length){ row.cuatrimestre = '1'; return; }
+    let best = marks[0], bestDist = Math.abs(row.docY - marks[0].y);
+    marks.forEach(m => {
+      const d = Math.abs(row.docY - m.y);
+      if(d < bestDist){ best = m; bestDist = d; }
+    });
+    row.cuatrimestre = best.label;
+    delete row.docY;
+  });
+
+  provisional.forEach((r, i) => { r.orden = i; });
+  return provisional;
 }
 
 $('#import-plan-btn').addEventListener('click', () => {
@@ -890,11 +914,16 @@ function renderImportPreview(){
   const cuatOpts = `<option value="1">1er cuat.</option><option value="2">2do cuat.</option><option value="anual">Anual</option>`;
   $('#import-preview-list').innerHTML = importPdfState.rows.map((r, i) => `
     <div class="import-row ${r.incluir?'':'is-excluded'}">
-      <input type="checkbox" class="import-row-check" data-idx="${i}" ${r.incluir?'checked':''}>
-      <input type="text" class="input import-row-nombre" data-idx="${i}" value="${escapeAttr(r.nombre)}">
-      <select class="input select import-row-anio" data-idx="${i}">${anioOpts}</select>
-      <select class="input select import-row-cuat" data-idx="${i}">${cuatOpts}</select>
-      ${(r.codigo || r.correlativasTexto) ? `<div class="import-row-hint" title="${escapeAttr([r.codigo, r.correlativasTexto].filter(Boolean).join(' — '))}">${r.codigo ? `<strong>${escapeHtml(r.codigo)}</strong> — ` : ''}${escapeHtml(r.correlativasTexto || '')}</div>` : ''}
+      <div class="import-row-line1">
+        <input type="checkbox" class="import-row-check" data-idx="${i}" ${r.incluir?'checked':''}>
+        <input type="text" class="input import-row-nombre" data-idx="${i}" value="${escapeAttr(r.nombre)}">
+        <select class="input select import-row-anio" data-idx="${i}">${anioOpts}</select>
+        <select class="input select import-row-cuat" data-idx="${i}">${cuatOpts}</select>
+      </div>
+      <div class="import-row-line2">
+        <input type="text" class="input import-row-codigo" data-idx="${i}" placeholder="código" value="${escapeAttr(r.codigo||'')}">
+        <input type="text" class="input import-row-correl" data-idx="${i}" placeholder="correlativas (referencia, texto libre)" value="${escapeAttr(r.correlativasTexto||'')}">
+      </div>
     </div>
   `).join('');
   importPdfState.rows.forEach((r, i) => {
@@ -914,6 +943,12 @@ function renderImportPreview(){
   }));
   $$('.import-row-cuat').forEach(sel => sel.addEventListener('change', () => {
     importPdfState.rows[Number(sel.dataset.idx)].cuatrimestre = sel.value;
+  }));
+  $$('.import-row-codigo').forEach(inp => inp.addEventListener('input', () => {
+    importPdfState.rows[Number(inp.dataset.idx)].codigo = inp.value;
+  }));
+  $$('.import-row-correl').forEach(inp => inp.addEventListener('input', () => {
+    importPdfState.rows[Number(inp.dataset.idx)].correlativasTexto = inp.value;
   }));
 }
 
