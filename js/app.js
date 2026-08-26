@@ -712,6 +712,224 @@ async function delPlanMateria(id){
   await userDoc(currentUser.uid).collection('plan').doc(id).delete();
 }
 
+// ============================================================
+// IMPORTAR PLAN DESDE PDF
+// ============================================================
+let importPdfState = null;
+
+function normTxt(s=''){
+  return s.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+}
+
+async function pdfToLines(file){
+  if(!window.pdfjsLib) throw new Error('No se pudo cargar el lector de PDF (revisá tu conexión a internet).');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  const lines = [];
+  for(let p = 1; p <= pdf.numPages; p++){
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    const items = content.items
+      .filter(it => it.str && it.str.trim())
+      .map(it => ({ str: it.str, x: it.transform[4], y: it.transform[5] }))
+      .sort((a,b) => b.y - a.y || a.x - b.x);
+    let cur = null;
+    items.forEach(it => {
+      if(!cur || Math.abs(cur.y - it.y) > 3){
+        cur = { y: it.y, items: [] };
+        lines.push(cur);
+      }
+      cur.items.push(it);
+    });
+  }
+  lines.forEach(l => l.items.sort((a,b) => a.x - b.x));
+  return lines;
+}
+
+// el límite derecho de la columna "asignatura" se ancla en la posición real
+// de los códigos de materia en el cuerpo de la tabla (no en el encabezado:
+// el texto de datos suele arrancar un poco antes que su propio título de
+// columna, y ese margen no es parejo entre columnas ni entre facultades).
+function detectColumns(lines){
+  let headerX = null;
+  lines.slice(0, 60).forEach(line => line.items.forEach(it => {
+    const t = normTxt(it.str);
+    if(/^(cod|codigo)\.?$/.test(t) && headerX === null) headerX = it.x;
+    if(headerX === null && /^(correlativas?|requisitos?)$/.test(t)) headerX = it.x;
+  }));
+
+  const codeRe = /^[A-ZÑ]{2,10}\d{2,5}[A-Z]?$/;
+  const windowLo = headerX !== null ? headerX - 80 : 0;
+  const windowHi = headerX !== null ? headerX + 80 : Infinity;
+  let dataCodeX = null;
+  lines.forEach(line => line.items.forEach(it => {
+    if(it.x >= windowLo && it.x <= windowHi && codeRe.test(it.str.trim())){
+      if(dataCodeX === null || it.x < dataCodeX) dataCodeX = it.x;
+    }
+  }));
+
+  let nombreEndX;
+  if(dataCodeX !== null) nombreEndX = dataCodeX - 4;
+  else if(headerX !== null) nombreEndX = headerX - 20;
+  else {
+    const pageWidths = lines.map(l => Math.max(0, ...l.items.map(i => i.x)));
+    nombreEndX = (Math.max(...pageWidths, 400)) * 0.55;
+  }
+  return { nombreEndX };
+}
+
+const ANIO_PALABRAS = { primer:1, primero:1, segundo:2, tercer:3, tercero:3, cuarto:4, quinto:5, sexto:6, septimo:7, octavo:8 };
+
+function parsePlanLines(lines){
+  const cols = detectColumns(lines);
+  const rows = [];
+  let anioActual = null;
+  let cuatLabel = '1';
+  let seenCuat = [];
+  let lastRow = null;
+  let stopped = false;
+
+  for(const line of lines){
+    if(stopped) continue;
+    const fullText = line.items.map(i => i.str).join(' ').replace(/\s+/g,' ').trim();
+    if(!fullText) continue;
+
+    if(/CR[EÉ]DITOS DE GRADO|CR[EÉ]DITOS TOTALES|REQUISITOS ACAD[EÉ]MIC/i.test(fullText)){ stopped = true; continue; }
+    if(/^\(\+\+\)/.test(fullText)) continue;
+
+    const anioMatch = fullText.match(/^(PRIMER|SEGUNDO|TERCER|CUARTO|QUINTO|SEXTO|S[EÉ]PTIMO|OCTAVO)\s+A[ÑN]O\b/i);
+    if(anioMatch){
+      anioActual = ANIO_PALABRAS[normTxt(anioMatch[1])] || (anioActual||0)+1;
+      seenCuat = []; cuatLabel = '1'; lastRow = null;
+      continue;
+    }
+    if(/CR[EÉ]DITOS|GRADO (OBLIGATORIOS|OPTATIVAS|PPS|PSC)|REQUISITOS ACAD[EÉ]MIC|SUJETO A VERIFICACI|^(Cu|at|Asignatura|C[oó]d\.?|CG|Hs\.?|Correlativas)$/i.test(fullText)) continue;
+
+    if(/\b1\s*(er|ro)?\.?\s*cuatr|cuatrimestre\s*1\b/i.test(fullText) && fullText.length < 40){ cuatLabel = '1'; lastRow = null; continue; }
+    if(/\b2\s*(do)?\.?\s*cuatr|cuatrimestre\s*2\b/i.test(fullText) && fullText.length < 40){ cuatLabel = '2'; lastRow = null; continue; }
+    if(/^anual$/i.test(fullText)){ cuatLabel = 'anual'; lastRow = null; continue; }
+
+    let nombreText = line.items.filter(i => i.x < cols.nombreEndX)
+      .map(i => i.str).join(' ').replace(/\s+/g,' ').trim();
+    const detalleText = line.items.filter(i => i.x >= cols.nombreEndX)
+      .map(i => i.str).join(' ').replace(/\s+/g,' ').trim();
+
+    const cuatMarker = nombreText.match(/^(\d{1,2})\s+(\S.*)$/);
+    if(cuatMarker){
+      const n = cuatMarker[1];
+      if(!seenCuat.includes(n)) seenCuat.push(n);
+      cuatLabel = seenCuat.indexOf(n) % 2 === 0 ? '1' : '2';
+      nombreText = cuatMarker[2];
+    } else if(/^\d{1,2}$/.test(nombreText)){
+      const n = nombreText;
+      if(!seenCuat.includes(n)) seenCuat.push(n);
+      cuatLabel = seenCuat.indexOf(n) % 2 === 0 ? '1' : '2';
+      nombreText = '';
+    }
+
+    if(nombreText && anioActual){
+      const row = { nombre: nombreText, anio: anioActual, cuatrimestre: cuatLabel, detalle: detalleText, incluir: true };
+      rows.push(row);
+      lastRow = row;
+    } else if(detalleText && lastRow){
+      lastRow.detalle = (lastRow.detalle + ' ' + detalleText).trim();
+    }
+  }
+  return rows;
+}
+
+$('#import-plan-btn').addEventListener('click', () => {
+  $('#import-pdf-file').value = '';
+  $('#import-pdf-status').textContent = '';
+  $('#import-preview-wrap').classList.add('hidden');
+  $('#import-preview-list').innerHTML = '';
+  $('#import-confirm-btn').classList.add('hidden');
+  importPdfState = null;
+  $('#modal-import-plan').showModal();
+});
+
+$('#import-pdf-process-btn').addEventListener('click', async () => {
+  const file = $('#import-pdf-file').files[0];
+  if(!file){ $('#import-pdf-status').textContent = 'Elegí un archivo PDF primero.'; return; }
+  $('#import-pdf-status').textContent = 'Procesando…';
+  try{
+    const lines = await pdfToLines(file);
+    const rows = parsePlanLines(lines);
+    if(!rows.length){
+      $('#import-pdf-status').textContent = 'No se detectaron materias. Puede que el PDF sea una imagen escaneada (sin texto) o tenga un formato muy distinto.';
+      return;
+    }
+    importPdfState = { rows };
+    renderImportPreview();
+    $('#import-pdf-status').textContent = `${rows.length} materias detectadas.`;
+    $('#import-preview-wrap').classList.remove('hidden');
+    $('#import-confirm-btn').classList.remove('hidden');
+  } catch(err){
+    console.error(err);
+    $('#import-pdf-status').textContent = 'No se pudo leer el PDF: ' + err.message;
+  }
+});
+
+function renderImportPreview(){
+  const anioOpts = [1,2,3,4,5,6,7].map(n => `<option value="${n}">${n}° año</option>`).join('');
+  const cuatOpts = `<option value="1">1er cuat.</option><option value="2">2do cuat.</option><option value="anual">Anual</option>`;
+  $('#import-preview-list').innerHTML = importPdfState.rows.map((r, i) => `
+    <div class="import-row ${r.incluir?'':'is-excluded'}">
+      <input type="checkbox" class="import-row-check" data-idx="${i}" ${r.incluir?'checked':''}>
+      <input type="text" class="input import-row-nombre" data-idx="${i}" value="${escapeAttr(r.nombre)}">
+      <select class="input select import-row-anio" data-idx="${i}">${anioOpts}</select>
+      <select class="input select import-row-cuat" data-idx="${i}">${cuatOpts}</select>
+      ${r.detalle ? `<div class="import-row-hint" title="${escapeAttr(r.detalle)}">${escapeHtml(r.detalle)}</div>` : ''}
+    </div>
+  `).join('');
+  importPdfState.rows.forEach((r, i) => {
+    $(`.import-row-anio[data-idx="${i}"]`).value = String(r.anio);
+    $(`.import-row-cuat[data-idx="${i}"]`).value = r.cuatrimestre;
+  });
+  $$('.import-row-check').forEach(cb => cb.addEventListener('change', () => {
+    const i = Number(cb.dataset.idx);
+    importPdfState.rows[i].incluir = cb.checked;
+    cb.closest('.import-row').classList.toggle('is-excluded', !cb.checked);
+  }));
+  $$('.import-row-nombre').forEach(inp => inp.addEventListener('input', () => {
+    importPdfState.rows[Number(inp.dataset.idx)].nombre = inp.value;
+  }));
+  $$('.import-row-anio').forEach(sel => sel.addEventListener('change', () => {
+    importPdfState.rows[Number(sel.dataset.idx)].anio = Number(sel.value);
+  }));
+  $$('.import-row-cuat').forEach(sel => sel.addEventListener('change', () => {
+    importPdfState.rows[Number(sel.dataset.idx)].cuatrimestre = sel.value;
+  }));
+}
+
+$('#import-confirm-btn').addEventListener('click', async () => {
+  if(!importPdfState) return;
+  const seleccion = importPdfState.rows.filter(r => r.incluir && r.nombre.trim());
+  if(!seleccion.length) return;
+  const btn = $('#import-confirm-btn');
+  btn.disabled = true;
+  $('#import-pdf-status').textContent = 'Importando…';
+  try{
+    const col = userDoc(currentUser.uid).collection('plan');
+    await Promise.all(seleccion.map(r => col.add({
+      nombre: r.nombre.trim(),
+      anio: Number(r.anio),
+      cuatrimestre: r.cuatrimestre,
+      estado: 'no_cursada',
+      nota: null,
+      correlativas: [],
+    })));
+    $('#modal-import-plan').close();
+  } catch(err){
+    console.error(err);
+    $('#import-pdf-status').textContent = 'Error al importar: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 // ---------------- helpers de escape ----------------
 function escapeHtml(str=''){
   return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
