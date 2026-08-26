@@ -1,4 +1,4 @@
-# Cursada
+# Mi Cursada
 
 App web para organizarse en la facultad: calendario, pendientes, horarios, resúmenes vinculados a Google Docs y progreso de la carrera. Es HTML/CSS/JS puro (sin build step), lista para subir a GitHub Pages o cualquier hosting estático.
 
