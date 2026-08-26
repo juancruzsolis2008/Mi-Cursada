@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cursada — organizador de facultad</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ===================== PANTALLA DE LOGIN ===================== -->
+<section id="login-screen" class="login-screen">
+  <div class="login-card">
+    <div class="login-mark">§</div>
+    <h1 class="login-title">Cursada</h1>
+    <p class="login-sub">Tu facultad, en un solo lugar: horarios, pendientes, resúmenes y el mapa de la carrera.</p>
+    <button id="google-signin-btn" class="btn btn-primary btn-google">
+      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.87 2.7-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.98v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.66 9c0-.59.1-1.17.29-1.7V4.97H.98A9 9 0 0 0 0 9c0 1.45.35 2.83.98 4.03l2.97-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .98 4.97L3.95 7.3C4.66 5.17 6.65 3.58 9 3.58z"/></svg>
+      Ingresar con Google
+    </button>
+    <p class="login-note">Tus datos quedan en tu propia cuenta — nadie más puede verlos.</p>
+  </div>
+</section>
+
+<!-- ===================== APP ===================== -->
+<div id="app-shell" class="app-shell hidden">
+
+  <aside class="sidebar">
+    <div class="sidebar-mark">§ Cursada</div>
+    <nav class="sidebar-nav">
+      <button class="nav-item is-active" data-view="inicio">
+        <span class="nav-icon">◐</span> Inicio
+      </button>
+      <button class="nav-item" data-view="calendario">
+        <span class="nav-icon">▦</span> Calendario
+      </button>
+      <button class="nav-item" data-view="pendientes">
+        <span class="nav-icon">☑</span> Pendientes
+      </button>
+      <button class="nav-item" data-view="materias">
+        <span class="nav-icon">✎</span> Materias
+      </button>
+      <button class="nav-item" data-view="progreso">
+        <span class="nav-icon">◔</span> Progreso
+      </button>
+    </nav>
+    <div class="sidebar-progress" id="sidebar-progress">
+      <div class="sidebar-progress-label">
+        <span>Carrera</span>
+        <span id="sidebar-progress-pct">0%</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" id="sidebar-progress-fill"></div></div>
+    </div>
+    <div class="sidebar-user">
+      <img id="user-photo" class="user-photo" alt="">
+      <div class="user-info">
+        <div id="user-name" class="user-name">—</div>
+        <button id="signout-btn" class="user-signout">Salir</button>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- ---------- INICIO ---------- -->
+    <section class="view is-active" id="view-inicio">
+      <header class="view-header">
+        <div>
+          <p class="view-eyebrow" id="today-date">—</p>
+          <h1 class="view-title">Hoy</h1>
+        </div>
+      </header>
+
+      <div class="grid-2col">
+        <div class="card">
+          <h2 class="card-title">Hoy</h2>
+          <div id="hoy-clases" class="mini-list"></div>
+          <h3 class="card-subtitle">Pendientes de hoy</h3>
+          <div id="hoy-pendientes" class="mini-list"></div>
+        </div>
+        <div class="card">
+          <h2 class="card-title">Mañana</h2>
+          <div id="manana-clases" class="mini-list"></div>
+          <h3 class="card-subtitle">Pendientes de mañana</h3>
+          <div id="manana-pendientes" class="mini-list"></div>
+        </div>
+      </div>
+
+      <div class="card" id="proximo-card" style="display:none">
+        <h2 class="card-title">Próximo</h2>
+        <div id="proximo-list" class="mini-list"></div>
+      </div>
+    </section>
+
+    <!-- ---------- CALENDARIO ---------- -->
+    <section class="view" id="view-calendario">
+      <header class="view-header">
+        <div>
+          <p class="view-eyebrow">Vista general</p>
+          <h1 class="view-title">Calendario</h1>
+        </div>
+        <div class="view-actions">
+          <div class="segmented">
+            <button class="segmented-btn is-active" data-cal-mode="semana">Semana</button>
+            <button class="segmented-btn" data-cal-mode="mes">Mes</button>
+          </div>
+        </div>
+      </header>
+
+      <div id="cal-semana" class="cal-week card">
+        <div class="cal-week-grid" id="cal-week-grid"></div>
+      </div>
+
+      <div id="cal-mes" class="cal-month hidden">
+        <div class="cal-month-header">
+          <button id="mes-prev" class="icon-btn">←</button>
+          <h2 id="mes-label" class="cal-month-label">—</h2>
+          <button id="mes-next" class="icon-btn">→</button>
+        </div>
+        <div class="cal-month-grid" id="cal-month-grid"></div>
+        <div class="card" id="cal-day-detail">
+          <h2 class="card-title" id="cal-day-detail-title">Seleccioná un día</h2>
+          <div id="cal-day-detail-list" class="mini-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- PENDIENTES ---------- -->
+    <section class="view" id="view-pendientes">
+      <header class="view-header">
+        <div>
+          <p class="view-eyebrow">Tareas y entregas</p>
+          <h1 class="view-title">Pendientes</h1>
+        </div>
+        <div class="view-actions">
+          <select id="pend-filtro-materia" class="input select"><option value="">Todas las materias</option></select>
+          <button class="btn btn-primary" id="add-pendiente-btn">+ Nuevo pendiente</button>
+        </div>
+      </header>
+
+      <div id="pendientes-groups"></div>
+    </section>
+
+    <!-- ---------- MATERIAS ---------- -->
+    <section class="view" id="view-materias">
+      <header class="view-header">
+        <div>
+          <p class="view-eyebrow">Este cuatrimestre</p>
+          <h1 class="view-title">Materias</h1>
+        </div>
+        <div class="view-actions">
+          <button class="btn btn-primary" id="add-materia-btn">+ Nueva materia</button>
+        </div>
+      </header>
+
+      <div id="materias-grid" class="materias-grid"></div>
+    </section>
+
+    <!-- ---------- PROGRESO ---------- -->
+    <section class="view" id="view-progreso">
+      <header class="view-header">
+        <div>
+          <p class="view-eyebrow" id="progreso-carrera-label">Tu carrera</p>
+          <h1 class="view-title">Progreso</h1>
+        </div>
+        <div class="view-actions">
+          <button class="btn btn-ghost" id="edit-carrera-btn">Editar carrera</button>
+          <button class="btn btn-primary" id="add-plan-materia-btn">+ Agregar materia al plan</button>
+        </div>
+      </header>
+
+      <div class="card progreso-summary">
+        <div class="progreso-summary-top">
+          <div>
+            <div class="progreso-big-pct" id="progreso-big-pct">0%</div>
+            <div class="progreso-count" id="progreso-count">0 de 0 materias aprobadas</div>
+          </div>
+          <div class="progreso-promedio">
+            <div class="progreso-promedio-label">Promedio</div>
+            <div class="progreso-promedio-val" id="progreso-promedio">—</div>
+          </div>
+        </div>
+        <div class="progress-track progress-track-lg"><div class="progress-fill" id="progreso-fill"></div></div>
+      </div>
+
+      <div id="plan-years"></div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ===================== MODALES ===================== -->
+
+<dialog id="modal-pendiente" class="modal">
+  <form method="dialog" id="form-pendiente" class="modal-form">
+    <h2 class="modal-title" id="modal-pendiente-title">Nuevo pendiente</h2>
+    <input type="hidden" id="pend-id">
+    <label class="field"><span>Título</span><input required id="pend-titulo" class="input" type="text" placeholder="Entregar TP2"></label>
+    <label class="field"><span>Materia</span><select id="pend-materia" class="input select"><option value="">Sin materia</option></select></label>
+    <div class="field-row">
+      <label class="field"><span>Fecha</span><input id="pend-fecha" class="input" type="date"></label>
+      <label class="field"><span>Prioridad</span>
+        <select id="pend-prioridad" class="input select">
+          <option value="baja">Baja</option>
+          <option value="media" selected>Media</option>
+          <option value="alta">Alta</option>
+        </select>
+      </label>
+    </div>
+    <label class="field"><span>Link al resumen (Google Docs, opcional)</span><input id="pend-link" class="input" type="url" placeholder="https://docs.google.com/..."></label>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" data-close="modal-pendiente">Cancelar</button>
+      <button type="submit" class="btn btn-primary">Guardar</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="modal-materia" class="modal">
+  <form method="dialog" id="form-materia" class="modal-form">
+    <h2 class="modal-title">Nueva materia</h2>
+    <input type="hidden" id="mat-id">
+    <label class="field"><span>Nombre</span><input required id="mat-nombre" class="input" type="text" placeholder="Anatomía I"></label>
+    <label class="field"><span>Color</span>
+      <div class="color-picker" id="mat-color-picker"></div>
+      <input type="hidden" id="mat-color" value="#2F6F5E">
+    </label>
+    <div class="field">
+      <span>Horarios de cursada</span>
+      <div id="mat-horarios-list" class="horarios-list"></div>
+      <button type="button" class="btn btn-ghost btn-small" id="add-horario-row">+ Agregar horario</button>
+    </div>
+    <div class="field">
+      <span>Resúmenes (Google Docs)</span>
+      <div id="mat-docs-list" class="docs-list"></div>
+      <div class="field-row">
+        <button type="button" class="btn btn-ghost btn-small" id="crear-doc-btn">Crear resumen nuevo ↗</button>
+        <button type="button" class="btn btn-ghost btn-small" id="add-doc-row">+ Vincular Doc existente</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" data-close="modal-materia">Cancelar</button>
+      <button type="submit" class="btn btn-primary">Guardar materia</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="modal-plan-materia" class="modal">
+  <form method="dialog" id="form-plan-materia" class="modal-form">
+    <h2 class="modal-title">Agregar materia al plan</h2>
+    <input type="hidden" id="plan-id">
+    <label class="field"><span>Nombre</span><input required id="plan-nombre" class="input" type="text" placeholder="Fisiología"></label>
+    <div class="field-row">
+      <label class="field"><span>Año</span>
+        <select id="plan-anio" class="input select">
+          <option value="1">1° año</option><option value="2">2° año</option><option value="3">3° año</option>
+          <option value="4">4° año</option><option value="5">5° año</option><option value="6">6° año</option><option value="7">7° año</option>
+        </select>
+      </label>
+      <label class="field"><span>Cuatrimestre</span>
+        <select id="plan-cuatrimestre" class="input select">
+          <option value="1">1er cuatrimestre</option>
+          <option value="2">2do cuatrimestre</option>
+          <option value="anual">Anual</option>
+        </select>
+      </label>
+    </div>
+    <label class="field"><span>Correlativas (opcional)</span>
+      <select id="plan-correlativas" class="input select" multiple size="4"></select>
+      <span class="field-hint">Mantené Ctrl (o Cmd) para elegir varias.</span>
+    </label>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" data-close="modal-plan-materia">Cancelar</button>
+      <button type="submit" class="btn btn-primary">Guardar</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="modal-carrera" class="modal">
+  <form method="dialog" id="form-carrera" class="modal-form">
+    <h2 class="modal-title">Tu carrera</h2>
+    <label class="field"><span>Nombre de la carrera</span><input id="carrera-nombre" class="input" type="text" placeholder="Medicina"></label>
+    <label class="field"><span>Universidad</span><input id="carrera-universidad" class="input" type="text" placeholder="UNMDP"></label>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" data-close="modal-carrera">Cancelar</button>
+      <button type="submit" class="btn btn-primary">Guardar</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Firebase (compat SDK, sin build step) -->
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+
+<script src="js/config.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
