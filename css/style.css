@@ -261,8 +261,8 @@ a{ color:inherit; }
 .cal-week{ overflow-x:auto; }
 .cal-week-grid{
   display:grid;
-  grid-template-columns: 56px repeat(6, minmax(120px,1fr));
-  min-width:820px;
+  grid-template-columns: 56px repeat(7, minmax(110px,1fr));
+  min-width:930px;
   position:relative;
 }
 .cal-head-cell{

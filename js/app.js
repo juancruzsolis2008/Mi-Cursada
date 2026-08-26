@@ -8,7 +8,7 @@ const auth = firebase.auth();
 const db = firebase.firestore();
 const googleProvider = new firebase.auth.GoogleAuthProvider();
 
-const DIAS = ['Lun','Mar','Mié','Jue','Vie','Sáb'];       // dia: 1..6
+const DIAS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];  // dia: 1..7
 const DIAS_LARGO = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 const COLORES = ['#2F6F5E','#B8622E','#3D5A80','#A9821F','#7A5C61','#5B7553','#8A4F7D','#4A6FA5'];
@@ -208,7 +208,7 @@ function renderSemanaGrid(){
 
   for(let h = CAL_START_HOUR; h < CAL_END_HOUR; h++){
     html += `<div class="cal-hour-cell">${String(h).padStart(2,'0')}:00</div>`;
-    for(let d = 1; d <= 6; d++){
+    for(let d = 1; d <= 7; d++){
       html += `<div class="cal-slot" data-dia="${d}" data-hora="${h}"></div>`;
     }
   }
@@ -218,7 +218,7 @@ function renderSemanaGrid(){
   // bloques de horario posicionados absolutamente sobre la columna del día
   state.materias.forEach(m => (m.horarios||[]).forEach(h => {
     const dia = Number(h.dia);
-    if(dia < 1 || dia > 6) return;
+    if(dia < 1 || dia > 7) return;
     const slot = grid.querySelector(`.cal-slot[data-dia="${dia}"][data-hora="${CAL_START_HOUR}"]`);
     if(!slot) return;
     const [ih, im] = h.inicio.split(':').map(Number);
@@ -230,9 +230,9 @@ function renderSemanaGrid(){
     block.style.position = 'absolute';
     block.style.top = (32 + (ih - CAL_START_HOUR) * 52 + (im/60*52)) + 'px';
     block.style.height = height + 'px';
-    const colIndex = dia; // 1..6
-    block.style.left = `calc(56px + (100% - 56px)/6 * ${colIndex - 1} + 3px)`;
-    block.style.width = `calc((100% - 56px)/6 - 6px)`;
+    const colIndex = dia; // 1..7
+    block.style.left = `calc(56px + (100% - 56px)/7 * ${colIndex - 1} + 3px)`;
+    block.style.width = `calc((100% - 56px)/7 - 6px)`;
     block.innerHTML = `${escapeHtml(m.nombre)}<small>${h.inicio}–${h.fin}${h.aula? ' · '+escapeHtml(h.aula):''}</small>`;
     grid.appendChild(block);
   }));
