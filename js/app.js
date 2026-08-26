@@ -690,7 +690,30 @@ async function toggleAprobada(id){
   }
 }
 async function updateEstado(id, estado){
-  await userDoc(currentUser.uid).collection('plan').doc(id).update({ estado, nota: estado==='aprobada' ? (state.plan.find(p=>p.id===id)?.nota ?? null) : null });
+  const p = state.plan.find(x => x.id === id);
+  const data = { estado, nota: estado==='aprobada' ? (p?.nota ?? null) : null };
+  if(estado === 'cursando'){
+    data.materiaId = await ensureMateriaParaPlan(p);
+  }
+  await userDoc(currentUser.uid).collection('plan').doc(id).update(data);
+}
+
+// al marcar una materia del plan como "cursando", se crea (o vincula, si ya
+// existe una con el mismo nombre) la materia correspondiente en Materias,
+// para que ahí se le carguen horarios/aula — Calendario e Inicio ya
+// muestran lo que haya en esa colección, sin lógica extra.
+async function ensureMateriaParaPlan(p){
+  if(!p) return null;
+  if(p.materiaId && state.materias.some(m => m.id === p.materiaId)) return p.materiaId;
+  const existente = state.materias.find(m => normTxt(m.nombre) === normTxt(p.nombre));
+  if(existente) return existente.id;
+  const ref = await userDoc(currentUser.uid).collection('materias').add({
+    nombre: p.nombre,
+    color: COLORES[state.materias.length % COLORES.length],
+    horarios: [],
+    docs: [],
+  });
+  return ref.id;
 }
 async function updateNota(id, val){
   const n = val === '' ? null : Number(val);
