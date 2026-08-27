@@ -355,10 +355,24 @@ a{ color:inherit; }
 .materia-horario{ font-size:12.5px; color:var(--ink-soft); font-family:var(--font-mono); margin-bottom:3px; }
 .materia-docs{ margin-top:10px; }
 .materia-doc-link{
-  display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--ink);
-  text-decoration:none; margin-bottom:4px; font-weight:600;
+  display:flex; align-items:center; gap:12px; padding:11px 14px;
+  background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-sm);
+  text-decoration:none; color:var(--ink); margin-bottom:8px;
+  transition:background .15s, border-color .15s;
 }
-.materia-doc-link:hover{ text-decoration:underline; }
+.materia-doc-link:hover{ background:var(--paper-deep); border-color:var(--line-strong); }
+.materia-doc-icon{
+  width:32px; height:32px; border-radius:50%; flex-shrink:0;
+  background:var(--seal-gold-soft); color:var(--seal-gold);
+  display:flex; align-items:center; justify-content:center; font-size:15px;
+}
+.materia-doc-title{
+  font-weight:600; font-size:13.5px; flex:1; min-width:0;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.materia-doc-open{
+  font-family:var(--font-mono); font-size:11px; color:var(--ink-faint); flex-shrink:0;
+}
 .materia-doc-add{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; align-items:center; }
 .materia-doc-add-titulo{ flex:1 1 160px; }
 .materia-doc-add-url{ flex:2 1 220px; }

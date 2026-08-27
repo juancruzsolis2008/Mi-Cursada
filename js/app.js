@@ -519,7 +519,13 @@ function renderMaterias(){
 
         <div class="card-subtitle">Resúmenes y documentos</div>
         <div class="materia-docs">
-          ${(m.docs||[]).map(d => `<a class="materia-doc-link" href="${escapeAttr(d.url)}" target="_blank" rel="noopener">↗ ${escapeHtml(d.titulo)}</a>`).join('') || '<p class="empty-note">Sin resúmenes vinculados todavía.</p>'}
+          ${(m.docs||[]).map(d => `
+            <a class="materia-doc-link" href="${escapeAttr(d.url)}" target="_blank" rel="noopener">
+              <span class="materia-doc-icon">📄</span>
+              <span class="materia-doc-title">${escapeHtml(d.titulo)}</span>
+              <span class="materia-doc-open">Abrir ↗</span>
+            </a>
+          `).join('') || '<p class="empty-note">Sin resúmenes vinculados todavía.</p>'}
         </div>
         <div class="materia-doc-add">
           <input type="text" class="input materia-doc-add-titulo" data-id="${m.id}" placeholder="Título (ej: Módulo 1)">
