@@ -449,7 +449,7 @@ function addDocRow(doc = {}){
   wrap.className = 'doc-row';
   wrap.innerHTML = `
     <input class="input doc-titulo" type="text" placeholder="Título (ej: Resumen unidad 1)" value="${doc.titulo?escapeAttr(doc.titulo):''}">
-    <input class="input doc-url" type="url" placeholder="URL de Google Docs" value="${doc.url?escapeAttr(doc.url):''}">
+    <input class="input doc-url" type="url" placeholder="Link (Google Docs, Drive, PDF...)" value="${doc.url?escapeAttr(doc.url):''}">
     <button type="button" class="row-icon-btn" data-rm-row>✕</button>
   `;
   wrap.querySelector('[data-rm-row]').addEventListener('click', () => wrap.remove());
@@ -458,6 +458,10 @@ function addDocRow(doc = {}){
 $('#add-doc-row').addEventListener('click', () => addDocRow());
 $('#crear-doc-btn').addEventListener('click', () => {
   window.open('https://docs.google.com/document/create', '_blank');
+  addDocRow({ titulo: '', url: '' });
+});
+$('#subir-drive-btn').addEventListener('click', () => {
+  window.open('https://drive.google.com/drive/my-drive', '_blank');
   addDocRow({ titulo: '', url: '' });
 });
 
@@ -518,11 +522,13 @@ function renderMaterias(){
           ${(m.docs||[]).map(d => `<a class="materia-doc-link" href="${escapeAttr(d.url)}" target="_blank" rel="noopener">↗ ${escapeHtml(d.titulo)}</a>`).join('') || '<p class="empty-note">Sin resúmenes vinculados todavía.</p>'}
         </div>
         <div class="materia-doc-add">
-          <input type="text" class="input materia-doc-add-titulo" data-id="${m.id}" placeholder="Título (ej: Resumen unidad 1)">
-          <input type="url" class="input materia-doc-add-url" data-id="${m.id}" placeholder="URL de Google Docs">
+          <input type="text" class="input materia-doc-add-titulo" data-id="${m.id}" placeholder="Título (ej: Módulo 1)">
+          <input type="url" class="input materia-doc-add-url" data-id="${m.id}" placeholder="Link (Google Docs, Drive, PDF...)">
           <button type="button" class="btn btn-ghost btn-small materia-doc-add-btn" data-id="${m.id}">+ Agregar link</button>
-          <button type="button" class="btn btn-ghost btn-small materia-doc-create-btn">Crear resumen nuevo ↗</button>
+          <button type="button" class="btn btn-ghost btn-small materia-doc-create-btn">Crear Doc nuevo ↗</button>
+          <button type="button" class="btn btn-ghost btn-small materia-doc-drive-btn">Subir PDF a Drive ↗</button>
         </div>
+        <p class="field-hint materia-doc-hint">Desde el celular: compartí el PDF a Drive, copiá el link y pegalo arriba.</p>
 
         <div class="card-subtitle">Notas</div>
         <textarea class="input materia-notas-input" data-id="${m.id}" rows="4" placeholder="Anotá lo que quieras sobre esta materia…">${escapeHtml(m.notas||'')}</textarea>
@@ -547,6 +553,7 @@ function renderMaterias(){
   $$('.materia-doc-add-btn').forEach(btn => btn.addEventListener('click', () => addDocInline(btn.dataset.id)));
   $$('.materia-notas-input').forEach(ta => ta.addEventListener('blur', () => updateNotasMateria(ta.dataset.id, ta.value)));
   $$('.materia-doc-create-btn').forEach(btn => btn.addEventListener('click', () => window.open('https://docs.google.com/document/create', '_blank')));
+  $$('.materia-doc-drive-btn').forEach(btn => btn.addEventListener('click', () => window.open('https://drive.google.com/drive/my-drive', '_blank')));
 }
 
 async function addDocInline(materiaId){

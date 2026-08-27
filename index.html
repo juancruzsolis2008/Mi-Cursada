@@ -212,7 +212,7 @@
         </select>
       </label>
     </div>
-    <label class="field"><span>Link al resumen (Google Docs, opcional)</span><input id="pend-link" class="input" type="url" placeholder="https://docs.google.com/..."></label>
+    <label class="field"><span>Link al resumen (opcional)</span><input id="pend-link" class="input" type="url" placeholder="https://drive.google.com/... o docs.google.com/..."></label>
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" data-close="modal-pendiente">Cancelar</button>
       <button type="submit" class="btn btn-primary">Guardar</button>
@@ -235,12 +235,14 @@
       <button type="button" class="btn btn-ghost btn-small" id="add-horario-row">+ Agregar horario</button>
     </div>
     <div class="field">
-      <span>Resúmenes (Google Docs)</span>
+      <span>Resúmenes y apuntes (cualquier link: Google Docs, Drive, PDF...)</span>
       <div id="mat-docs-list" class="docs-list"></div>
       <div class="field-row">
-        <button type="button" class="btn btn-ghost btn-small" id="crear-doc-btn">Crear resumen nuevo ↗</button>
-        <button type="button" class="btn btn-ghost btn-small" id="add-doc-row">+ Vincular Doc existente</button>
+        <button type="button" class="btn btn-ghost btn-small" id="crear-doc-btn">Crear Doc nuevo ↗</button>
+        <button type="button" class="btn btn-ghost btn-small" id="subir-drive-btn">Subir PDF a Drive ↗</button>
+        <button type="button" class="btn btn-ghost btn-small" id="add-doc-row">+ Agregar link existente</button>
       </div>
+      <p class="field-hint">Para tener un PDF a mano: subilo a Drive (desde WhatsApp tocá compartir → Drive), copiá el link para compartir y pegalo acá.</p>
     </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" data-close="modal-materia">Cancelar</button>

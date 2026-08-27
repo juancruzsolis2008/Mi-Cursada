@@ -362,6 +362,7 @@ a{ color:inherit; }
 .materia-doc-add{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; align-items:center; }
 .materia-doc-add-titulo{ flex:1 1 160px; }
 .materia-doc-add-url{ flex:2 1 220px; }
+.materia-doc-hint{ display:block; margin-top:6px; }
 .materia-notas-input{
   width:100%; min-height:88px; resize:vertical; font-family:var(--font-body);
   font-size:13.5px; line-height:1.5;
