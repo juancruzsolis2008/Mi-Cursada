@@ -101,12 +101,23 @@ function attachListeners(uid){
 }
 
 // ---------------- NAV ----------------
+function closeMobileMenu(){
+  $('#sidebar').classList.remove('is-open');
+  $('#sidebar-backdrop').classList.remove('is-open');
+}
+$('#mobile-menu-btn').addEventListener('click', () => {
+  $('#sidebar').classList.add('is-open');
+  $('#sidebar-backdrop').classList.add('is-open');
+});
+$('#sidebar-backdrop').addEventListener('click', closeMobileMenu);
+
 $$('.nav-item').forEach(btn => {
   btn.addEventListener('click', () => {
     $$('.nav-item').forEach(b => b.classList.remove('is-active'));
     btn.classList.add('is-active');
     $$('.view').forEach(v => v.classList.remove('is-active'));
     $('#view-' + btn.dataset.view).classList.add('is-active');
+    closeMobileMenu();
   });
 });
 

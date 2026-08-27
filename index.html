@@ -29,7 +29,15 @@
 <!-- ===================== APP ===================== -->
 <div id="app-shell" class="app-shell hidden">
 
-  <aside class="sidebar">
+  <header class="mobile-topbar">
+    <button type="button" class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Abrir menú">
+      <span></span><span></span><span></span>
+    </button>
+    <span class="mobile-topbar-mark">Mi Cursada</span>
+  </header>
+  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
+  <aside class="sidebar" id="sidebar">
     <div class="sidebar-mark">Mi Cursada</div>
     <nav class="sidebar-nav">
       <button class="nav-item is-active" data-view="inicio">
