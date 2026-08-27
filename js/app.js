@@ -493,25 +493,78 @@ $('#form-materia').addEventListener('submit', async () => {
   else await col.add(data);
 });
 
+let materiasExpandidas = new Set();
+
 function renderMaterias(){
   const el = $('#materias-grid');
-  if(!state.materias.length){ el.innerHTML = '<p class="empty-note">Todavía no cargaste materias.</p>'; return; }
-  el.innerHTML = state.materias.map(m => `
+  if(!state.materias.length){
+    el.innerHTML = '<p class="empty-note">Todavía no tenés materias acá. Se agregan solas cuando marcás una materia del plan como "Cursando" en Progreso, o agregala a mano con el botón de arriba.</p>';
+    return;
+  }
+  el.innerHTML = state.materias.map(m => {
+    const abierta = materiasExpandidas.has(m.id);
+    return `
     <div class="materia-card" style="border-top-color:${m.color}">
-      <div class="materia-name">${escapeHtml(m.nombre)}</div>
-      ${(m.horarios||[]).map(h => `<div class="materia-horario">${DIAS[Number(h.dia)-1]||''} · ${h.inicio}–${h.fin}${h.aula?' · Aula '+escapeHtml(h.aula):''}</div>`).join('') || '<div class="materia-horario">Sin horario cargado</div>'}
-      <div class="materia-docs">
-        ${(m.docs||[]).map(d => `<a class="materia-doc-link" href="${escapeAttr(d.url)}" target="_blank" rel="noopener">↗ ${escapeHtml(d.titulo)}</a>`).join('') || '<p class="empty-note">Sin resúmenes vinculados.</p>'}
-      </div>
-      <div class="materia-card-actions">
-        <button class="btn btn-ghost btn-small" data-edit-mat="${m.id}">Editar</button>
-        <button class="btn btn-ghost btn-small" data-del-mat="${m.id}">Eliminar</button>
+      <button type="button" class="materia-card-header" data-toggle-mat="${m.id}">
+        <span class="materia-card-caret ${abierta?'is-open':''}">▾</span>
+        <span class="materia-name">${escapeHtml(m.nombre)}</span>
+        <span class="materia-horario-mini">${(m.horarios||[]).map(h => `${DIAS[Number(h.dia)-1]||''} ${h.inicio}`).join(' · ') || 'Sin horario cargado'}</span>
+      </button>
+      <div class="materia-card-body ${abierta?'':'hidden'}">
+        ${(m.horarios||[]).map(h => `<div class="materia-horario">${DIAS[Number(h.dia)-1]||''} · ${h.inicio}–${h.fin}${h.aula?' · Aula '+escapeHtml(h.aula):''}</div>`).join('') || '<div class="materia-horario">Sin horario cargado</div>'}
+
+        <div class="card-subtitle">Resúmenes y documentos</div>
+        <div class="materia-docs">
+          ${(m.docs||[]).map(d => `<a class="materia-doc-link" href="${escapeAttr(d.url)}" target="_blank" rel="noopener">↗ ${escapeHtml(d.titulo)}</a>`).join('') || '<p class="empty-note">Sin resúmenes vinculados todavía.</p>'}
+        </div>
+        <div class="materia-doc-add">
+          <input type="text" class="input materia-doc-add-titulo" data-id="${m.id}" placeholder="Título (ej: Resumen unidad 1)">
+          <input type="url" class="input materia-doc-add-url" data-id="${m.id}" placeholder="URL de Google Docs">
+          <button type="button" class="btn btn-ghost btn-small materia-doc-add-btn" data-id="${m.id}">+ Agregar link</button>
+          <button type="button" class="btn btn-ghost btn-small materia-doc-create-btn">Crear resumen nuevo ↗</button>
+        </div>
+
+        <div class="card-subtitle">Notas</div>
+        <textarea class="input materia-notas-input" data-id="${m.id}" rows="4" placeholder="Anotá lo que quieras sobre esta materia…">${escapeHtml(m.notas||'')}</textarea>
+
+        <div class="materia-card-actions">
+          <button class="btn btn-ghost btn-small" data-edit-mat="${m.id}">Editar horario</button>
+          <button class="btn btn-ghost btn-small" data-del-mat="${m.id}">Eliminar</button>
+        </div>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 
+  $$('[data-toggle-mat]').forEach(btn => btn.addEventListener('click', () => {
+    const id = btn.dataset.toggleMat;
+    if(materiasExpandidas.has(id)) materiasExpandidas.delete(id);
+    else materiasExpandidas.add(id);
+    renderMaterias();
+  }));
   $$('[data-edit-mat]').forEach(btn => btn.addEventListener('click', () => editMateria(btn.dataset.editMat)));
   $$('[data-del-mat]').forEach(btn => btn.addEventListener('click', () => delMateria(btn.dataset.delMat)));
+  $$('.materia-doc-add-btn').forEach(btn => btn.addEventListener('click', () => addDocInline(btn.dataset.id)));
+  $$('.materia-notas-input').forEach(ta => ta.addEventListener('blur', () => updateNotasMateria(ta.dataset.id, ta.value)));
+  $$('.materia-doc-create-btn').forEach(btn => btn.addEventListener('click', () => window.open('https://docs.google.com/document/create', '_blank')));
+}
+
+async function addDocInline(materiaId){
+  const tituloInp = $(`.materia-doc-add-titulo[data-id="${materiaId}"]`);
+  const urlInp = $(`.materia-doc-add-url[data-id="${materiaId}"]`);
+  const titulo = tituloInp.value.trim();
+  const url = urlInp.value.trim();
+  if(!titulo || !url) return;
+  const m = state.materias.find(x => x.id === materiaId);
+  if(!m) return;
+  const docs = [...(m.docs||[]), { titulo, url }];
+  materiasExpandidas.add(materiaId);
+  await userDoc(currentUser.uid).collection('materias').doc(materiaId).update({ docs });
+}
+
+async function updateNotasMateria(materiaId, notas){
+  materiasExpandidas.add(materiaId);
+  await userDoc(currentUser.uid).collection('materias').doc(materiaId).update({ notas });
 }
 
 function editMateria(id){
@@ -713,6 +766,7 @@ async function ensureMateriaParaPlan(p){
     horarios: [],
     docs: [],
   });
+  materiasExpandidas.add(ref.id);
   return ref.id;
 }
 async function updateNota(id, val){

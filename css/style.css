@@ -335,20 +335,38 @@ a{ color:inherit; }
 .row-icon-btn:hover{ color:var(--seal-red); }
 
 /* ---------------- Materias ---------------- */
-.materias-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(260px,1fr)); gap:16px; }
+.materias-grid{ display:flex; flex-direction:column; gap:12px; }
 .materia-card{
   background:var(--paper-white); border:1px solid var(--line); border-radius:var(--radius);
-  padding:18px; box-shadow:var(--shadow); border-top:4px solid var(--ink);
+  box-shadow:var(--shadow); border-top:4px solid var(--ink); overflow:hidden;
 }
-.materia-name{ font-family:var(--font-display); font-size:17px; margin-bottom:8px; }
+.materia-card-header{
+  width:100%; display:flex; align-items:center; gap:12px; text-align:left;
+  background:none; border:none; padding:16px 18px; cursor:pointer; font:inherit; color:inherit;
+}
+.materia-card-caret{ color:var(--ink-faint); font-size:12px; transition:transform .2s; flex-shrink:0; }
+.materia-card-caret.is-open{ transform:rotate(-180deg); }
+.materia-name{ font-family:var(--font-display); font-size:16px; flex-shrink:0; }
+.materia-horario-mini{
+  font-family:var(--font-mono); font-size:11.5px; color:var(--ink-faint);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0; text-align:right;
+}
+.materia-card-body{ padding:0 18px 18px; }
 .materia-horario{ font-size:12.5px; color:var(--ink-soft); font-family:var(--font-mono); margin-bottom:3px; }
-.materia-docs{ margin-top:12px; border-top:1px solid var(--line); padding-top:10px; }
+.materia-docs{ margin-top:10px; }
 .materia-doc-link{
   display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--ink);
   text-decoration:none; margin-bottom:4px; font-weight:600;
 }
 .materia-doc-link:hover{ text-decoration:underline; }
-.materia-card-actions{ display:flex; gap:8px; margin-top:14px; }
+.materia-doc-add{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; align-items:center; }
+.materia-doc-add-titulo{ flex:1 1 160px; }
+.materia-doc-add-url{ flex:2 1 220px; }
+.materia-notas-input{
+  width:100%; min-height:88px; resize:vertical; font-family:var(--font-body);
+  font-size:13.5px; line-height:1.5;
+}
+.materia-card-actions{ display:flex; gap:8px; margin-top:16px; }
 
 /* ---------------- Progreso ---------------- */
 .progreso-summary-top{ display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:14px; }
