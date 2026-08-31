@@ -11,18 +11,20 @@ const googleProvider = new firebase.auth.GoogleAuthProvider();
 const DIAS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];  // dia: 1..7
 const DIAS_LARGO = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-const COLORES = ['#2F6F5E','#B8622E','#3D5A80','#A9821F','#7A5C61','#5B7553','#8A4F7D','#4A6FA5'];
+const COLORES = ['#2F53C7','#1E7A3D','#C81E4A','#B5820B','#7A5C61','#5B7553','#8A4F7D','#2A7A8C'];
 const CAL_START_HOUR = 8;
 const CAL_END_HOUR = 22;
+const CAL_HEAD_H = 34;
+const CAL_ROW_H = 52;
 
 let currentUser = null;
 let unsubscribers = [];
-let state = { materias: [], pendientes: [], plan: [], carrera: {} };
+let state = { archivos: [], pendientes: [], plan: [], carrera: {} };
 let calMode = 'semana';
 let mesActual = new Date();
 let diaSeleccionadoMes = null;
 let horarioRowSeq = 0;
-let docRowSeq = 0;
+let carpetasExpandidas = new Set();
 
 // ---------------- utilidades ----------------
 const $ = (sel, root=document) => root.querySelector(sel);
@@ -59,7 +61,7 @@ auth.onAuthStateChanged(user => {
     attachListeners(user.uid);
   } else {
     currentUser = null;
-    state = { materias: [], pendientes: [], plan: [], carrera: {} };
+    state = { archivos: [], pendientes: [], plan: [], carrera: {} };
     $('#app-shell').classList.add('hidden');
     $('#login-screen').classList.remove('hidden');
     $$('dialog[open]').forEach(d => d.close());
@@ -76,12 +78,9 @@ function attachListeners(uid){
     })
   );
   unsubscribers.push(
-    userDoc(uid).collection('materias').orderBy('nombre').onSnapshot(snap => {
-      state.materias = snap.docs.map(d => ({ id:d.id, ...d.data() }));
-      renderMaterias();
-      renderMateriaSelects();
-      renderInicio();
-      renderCalendario();
+    userDoc(uid).collection('archivos').orderBy('nombre').onSnapshot(snap => {
+      state.archivos = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+      renderArchivos();
     })
   );
   unsubscribers.push(
@@ -96,6 +95,9 @@ function attachListeners(uid){
     userDoc(uid).collection('plan').onSnapshot(snap => {
       state.plan = snap.docs.map(d => ({ id:d.id, ...d.data() }));
       renderProgreso();
+      renderPlanSelects();
+      renderInicio();
+      renderCalendario();
     })
   );
 }
@@ -156,14 +158,14 @@ function renderInicio(){
 }
 
 function renderClasesDia(sel, dia){
-  const items = state.materias
+  const items = state.plan
     .flatMap(m => (m.horarios||[]).filter(h => Number(h.dia) === dia).map(h => ({...h, materia:m})))
-    .sort((a,b) => a.inicio.localeCompare(b.inicio));
+    .sort((a,b) => (a.inicio||'').localeCompare(b.inicio||''));
   const el = $(sel);
   if(!items.length){ el.innerHTML = '<p class="empty-note">Sin clases.</p>'; return; }
   el.innerHTML = items.map(h => `
     <div class="mini-item">
-      <span class="mini-dot" style="background:${h.materia.color}"></span>
+      <span class="mini-dot" style="background:${h.materia.color || 'var(--marker)'}"></span>
       <div class="mini-item-text">
         <div class="mini-item-title">${escapeHtml(h.materia.nombre)}</div>
         ${h.aula ? `<div class="mini-item-meta">Aula ${escapeHtml(h.aula)}</div>` : ''}
@@ -183,7 +185,7 @@ function renderPendientesDia(sel, fecha){
 function prioRank(p){ return p==='alta'?2:p==='media'?1:0; }
 
 function miniItemPendiente(p){
-  const materia = state.materias.find(m => m.id === p.materiaId);
+  const materia = state.plan.find(m => m.id === p.planId);
   return `
     <div class="mini-item">
       <span class="pend-prio ${p.prioridad}"></span>
@@ -191,6 +193,7 @@ function miniItemPendiente(p){
         <div class="mini-item-title">${escapeHtml(p.titulo)}</div>
         <div class="mini-item-meta">${materia ? escapeHtml(materia.nombre) : 'Sin materia'} · ${fmtFecha(p.fecha)}</div>
       </div>
+      ${p.link ? `<a class="mini-item-link" href="${escapeAttr(p.link)}" target="_blank" rel="noopener">Abrir ↗</a>` : ''}
     </div>
   `;
 }
@@ -215,8 +218,14 @@ function renderCalendario(){ renderSemanaGrid(); if(calMode==='mes') renderMesGr
 function renderSemanaGrid(){
   const grid = $('#cal-week-grid');
   const totalHours = CAL_END_HOUR - CAL_START_HOUR;
+  const now = new Date();
+  const diaHoy = jsDowToDia(now.getDay());
+
   let html = `<div class="cal-head-cell"></div>`;
-  DIAS.forEach(d => html += `<div class="cal-head-cell">${d}</div>`);
+  DIAS.forEach((d,i) => {
+    const esHoy = (i+1) === diaHoy;
+    html += `<div class="cal-head-cell ${esHoy?'is-today':''}"><span class="${esHoy?'hl':''}">${d}</span></div>`;
+  });
 
   for(let h = CAL_START_HOUR; h < CAL_END_HOUR; h++){
     html += `<div class="cal-hour-cell">${String(h).padStart(2,'0')}:00</div>`;
@@ -224,30 +233,46 @@ function renderSemanaGrid(){
       html += `<div class="cal-slot" data-dia="${d}" data-hora="${h}"></div>`;
     }
   }
-  grid.style.gridTemplateRows = `32px repeat(${totalHours}, 52px)`;
+  grid.style.gridTemplateRows = `${CAL_HEAD_H}px repeat(${totalHours}, ${CAL_ROW_H}px)`;
   grid.innerHTML = html;
 
+  // franja de "hoy" bajo la columna del día actual
+  if(diaHoy >= 1 && diaHoy <= 7){
+    const wash = document.createElement('div');
+    wash.className = 'cal-col-today';
+    wash.style.left = `calc(56px + (100% - 56px)/7 * ${diaHoy - 1})`;
+    wash.style.width = `calc((100% - 56px)/7)`;
+    grid.appendChild(wash);
+  }
+
   // bloques de horario posicionados absolutamente sobre la columna del día
-  state.materias.forEach(m => (m.horarios||[]).forEach(h => {
+  state.plan.forEach(m => (m.horarios||[]).forEach(h => {
     const dia = Number(h.dia);
-    if(dia < 1 || dia > 7) return;
-    const slot = grid.querySelector(`.cal-slot[data-dia="${dia}"][data-hora="${CAL_START_HOUR}"]`);
-    if(!slot) return;
+    if(dia < 1 || dia > 7 || !h.inicio || !h.fin) return;
     const [ih, im] = h.inicio.split(':').map(Number);
     const [fh, fm] = h.fin.split(':').map(Number);
-    const height = Math.max(((fh - ih) + (fm-im)/60) * 52, 24);
+    const height = Math.max(((fh - ih) + (fm-im)/60) * CAL_ROW_H, 24);
     const block = document.createElement('div');
     block.className = 'cal-block';
-    block.style.background = m.color;
-    block.style.position = 'absolute';
-    block.style.top = (32 + (ih - CAL_START_HOUR) * 52 + (im/60*52)) + 'px';
+    block.style.background = m.color || 'var(--marker)';
+    block.style.top = (CAL_HEAD_H + (ih - CAL_START_HOUR) * CAL_ROW_H + (im/60*CAL_ROW_H)) + 'px';
     block.style.height = height + 'px';
-    const colIndex = dia; // 1..7
-    block.style.left = `calc(56px + (100% - 56px)/7 * ${colIndex - 1} + 3px)`;
+    block.style.left = `calc(56px + (100% - 56px)/7 * ${dia - 1} + 3px)`;
     block.style.width = `calc((100% - 56px)/7 - 6px)`;
     block.innerHTML = `${escapeHtml(m.nombre)}<small>${h.inicio}–${h.fin}${h.aula? ' · '+escapeHtml(h.aula):''}</small>`;
     grid.appendChild(block);
   }));
+
+  // línea de "ahora"
+  const nowH = now.getHours() + now.getMinutes()/60;
+  if(nowH >= CAL_START_HOUR && nowH <= CAL_END_HOUR){
+    const line = document.createElement('div');
+    line.className = 'cal-now-line';
+    line.style.top = (CAL_HEAD_H + (nowH - CAL_START_HOUR) * CAL_ROW_H) + 'px';
+    line.style.left = '56px';
+    line.style.right = '0';
+    grid.appendChild(line);
+  }
 }
 
 function renderMesGrid(){
@@ -276,8 +301,8 @@ function renderMesGrid(){
     const isSel = c.date === diaSeleccionadoMes;
     const eventos = state.pendientes.filter(p => p.fecha === c.date);
     const dots = eventos.slice(0,4).map(e => {
-      const materia = state.materias.find(mm => mm.id === e.materiaId);
-      const color = materia ? materia.color : 'var(--ink-faint)';
+      const materia = state.plan.find(mm => mm.id === e.planId);
+      const color = materia && materia.color ? materia.color : 'var(--ink-faint)';
       return `<span class="cal-day-dot" style="background:${color}"></span>`;
     }).join('');
     return `<div class="cal-day-cell ${isToday?'is-today':''} ${isSel?'is-selected':''}" data-date="${c.date}">
@@ -310,9 +335,13 @@ function renderDiaDetalle(dateStr){
 // ============================================================
 // PENDIENTES
 // ============================================================
-function renderMateriaSelects(){
-  const opts = state.materias.map(m => `<option value="${m.id}">${escapeHtml(m.nombre)}</option>`).join('');
+function renderPlanSelects(){
+  const opts = [...state.plan]
+    .sort((a,b) => (a.anio||0) - (b.anio||0) || String(a.nombre).localeCompare(String(b.nombre)))
+    .map(m => `<option value="${m.id}">${m.anio ? m.anio + '° · ' : ''}${escapeHtml(m.nombre)}</option>`).join('');
+  const pendActual = $('#pend-materia').value;
   $('#pend-materia').innerHTML = '<option value="">Sin materia</option>' + opts;
+  $('#pend-materia').value = pendActual;
   const filtroActual = $('#pend-filtro-materia').value;
   $('#pend-filtro-materia').innerHTML = '<option value="">Todas las materias</option>' + opts;
   $('#pend-filtro-materia').value = filtroActual;
@@ -331,7 +360,7 @@ $('#add-pendiente-btn').addEventListener('click', () => {
 $('#form-pendiente').addEventListener('submit', async (e) => {
   const data = {
     titulo: $('#pend-titulo').value.trim(),
-    materiaId: $('#pend-materia').value || null,
+    planId: $('#pend-materia').value || null,
     fecha: $('#pend-fecha').value || null,
     prioridad: $('#pend-prioridad').value,
     link: $('#pend-link').value.trim() || null,
@@ -353,8 +382,8 @@ function renderPendientes(){
   const hoy = todayStr();
   const finSemana = addDays(hoy, 7);
 
-  const activos = state.pendientes.filter(p => !p.completado && (!filtro || p.materiaId === filtro));
-  const completados = state.pendientes.filter(p => p.completado && (!filtro || p.materiaId === filtro))
+  const activos = state.pendientes.filter(p => !p.completado && (!filtro || p.planId === filtro));
+  const completados = state.pendientes.filter(p => p.completado && (!filtro || p.planId === filtro))
     .sort((a,b) => (b.fecha||'').localeCompare(a.fecha||'')).slice(0,15);
 
   const grupos = {
@@ -383,14 +412,14 @@ function renderPendientes(){
 }
 
 function pendRowHtml(p){
-  const materia = state.materias.find(m => m.id === p.materiaId);
+  const materia = state.plan.find(m => m.id === p.planId);
   return `
     <div class="pend-row ${p.completado?'is-done':''}">
       <button class="pend-check ${p.completado?'is-done':''}" data-id="${p.id}">${p.completado?'✓':''}</button>
       <div class="pend-body">
         <div class="pend-title">${escapeHtml(p.titulo)}</div>
         <div class="pend-meta">
-          ${materia ? `<span class="mini-dot" style="width:6px;height:6px;background:${materia.color};display:inline-block;border-radius:50%"></span> ${escapeHtml(materia.nombre)}` : 'Sin materia'}
+          ${materia ? `<span class="mini-dot" style="width:6px;height:6px;background:${materia.color||'var(--marker)'};display:inline-block;border-radius:2px"></span> ${escapeHtml(materia.nombre)}` : 'Sin materia'}
           ${p.fecha ? `· ${fmtFecha(p.fecha)}` : ''}
           <span class="pend-prio ${p.prioridad}"></span>
           ${p.link ? `<a class="pend-link" href="${escapeAttr(p.link)}" target="_blank" rel="noopener">Ver resumen ↗</a>` : ''}
@@ -412,7 +441,7 @@ function editPendiente(id){
   if(!p) return;
   $('#pend-id').value = p.id;
   $('#pend-titulo').value = p.titulo;
-  $('#pend-materia').value = p.materiaId || '';
+  $('#pend-materia').value = p.planId || '';
   $('#pend-fecha').value = p.fecha || '';
   $('#pend-prioridad').value = p.prioridad || 'media';
   $('#pend-link').value = p.link || '';
@@ -425,20 +454,41 @@ async function delPendiente(id){
 }
 
 // ============================================================
-// MATERIAS
+// ARCHIVOS  (carpetas de links — sin relación con Calendario ni Progreso)
 // ============================================================
-function buildColorPicker(){
-  const el = $('#mat-color-picker');
+function buildColorPicker(pickerSel, hiddenSel){
+  const el = $(pickerSel);
   el.innerHTML = COLORES.map(c => `<button type="button" class="color-swatch" data-color="${c}" style="background:${c}"></button>`).join('');
   $$('.color-swatch', el).forEach(sw => sw.addEventListener('click', () => {
-    $('#mat-color').value = sw.dataset.color;
+    $(hiddenSel).value = sw.dataset.color;
     $$('.color-swatch', el).forEach(s => s.classList.remove('is-selected'));
     sw.classList.add('is-selected');
   }));
 }
-buildColorPicker();
+function markColorPicker(pickerSel, color){
+  $$('.color-swatch', $(pickerSel)).forEach(s => s.classList.toggle('is-selected', s.dataset.color === color));
+}
+buildColorPicker('#carpeta-color-picker', '#carpeta-color');
+buildColorPicker('#plan-color-picker', '#plan-color');
 
-function addHorarioRow(h = {}){
+// filas de link (carpeta)
+function addLinkRow(link = {}){
+  const wrap = document.createElement('div');
+  wrap.className = 'link-row';
+  wrap.innerHTML = `
+    <input class="input link-titulo" type="text" placeholder="Título (ej: Resumen unidad 1)" value="${link.titulo?escapeAttr(link.titulo):''}">
+    <input class="input link-url" type="url" placeholder="https://…" value="${link.url?escapeAttr(link.url):''}">
+    <button type="button" class="row-icon-btn" data-rm-row>✕</button>
+  `;
+  wrap.querySelector('[data-rm-row]').addEventListener('click', () => wrap.remove());
+  $('#carpeta-links-list').appendChild(wrap);
+}
+$('#add-link-row').addEventListener('click', () => addLinkRow());
+$('#carpeta-abrir-docs').addEventListener('click', () => { window.open('https://docs.google.com/document/create', '_blank'); addLinkRow(); });
+$('#carpeta-abrir-drive').addEventListener('click', () => { window.open('https://drive.google.com/drive/my-drive', '_blank'); addLinkRow(); });
+
+// filas de horario (plan de estudios — modal de Progreso)
+function addPlanHorarioRow(h = {}){
   const rowId = 'hr' + (horarioRowSeq++);
   const wrap = document.createElement('div');
   wrap.className = 'horario-row';
@@ -447,167 +497,134 @@ function addHorarioRow(h = {}){
     <select class="input hr-dia">${DIAS.map((d,i) => `<option value="${i+1}" ${Number(h.dia)===i+1?'selected':''}>${d}</option>`).join('')}</select>
     <input class="input hr-inicio" type="time" value="${h.inicio||'08:00'}">
     <input class="input hr-fin" type="time" value="${h.fin||'10:00'}">
-    <input class="input hr-aula" type="text" placeholder="Aula" value="${h.aula?escapeAttr(h.aula):''}" style="max-width:80px">
+    <input class="input hr-aula" type="text" placeholder="Aula" value="${h.aula?escapeAttr(h.aula):''}">
     <button type="button" class="row-icon-btn" data-rm-row>✕</button>
   `;
   wrap.querySelector('[data-rm-row]').addEventListener('click', () => wrap.remove());
-  $('#mat-horarios-list').appendChild(wrap);
+  $('#plan-horarios-list').appendChild(wrap);
 }
-$('#add-horario-row').addEventListener('click', () => addHorarioRow());
+$('#add-plan-horario-row').addEventListener('click', () => addPlanHorarioRow());
 
-function addDocRow(doc = {}){
-  const wrap = document.createElement('div');
-  wrap.className = 'doc-row';
-  wrap.innerHTML = `
-    <input class="input doc-titulo" type="text" placeholder="Título (ej: Resumen unidad 1)" value="${doc.titulo?escapeAttr(doc.titulo):''}">
-    <input class="input doc-url" type="url" placeholder="Link (Google Docs, Drive, PDF...)" value="${doc.url?escapeAttr(doc.url):''}">
-    <button type="button" class="row-icon-btn" data-rm-row>✕</button>
-  `;
-  wrap.querySelector('[data-rm-row]').addEventListener('click', () => wrap.remove());
-  $('#mat-docs-list').appendChild(wrap);
-}
-$('#add-doc-row').addEventListener('click', () => addDocRow());
-$('#crear-doc-btn').addEventListener('click', () => {
-  window.open('https://docs.google.com/document/create', '_blank');
-  addDocRow({ titulo: '', url: '' });
-});
-$('#subir-drive-btn').addEventListener('click', () => {
-  window.open('https://drive.google.com/drive/my-drive', '_blank');
-  addDocRow({ titulo: '', url: '' });
+$('#add-carpeta-btn').addEventListener('click', () => {
+  $('#form-carpeta').reset();
+  $('#carpeta-id').value = '';
+  $('#carpeta-color').value = COLORES[0];
+  markColorPicker('#carpeta-color-picker', COLORES[0]);
+  $('#carpeta-links-list').innerHTML = '';
+  addLinkRow();
+  $('#modal-carpeta-title').textContent = 'Nueva carpeta';
+  $('#modal-carpeta').showModal();
 });
 
-$('#add-materia-btn').addEventListener('click', () => {
-  $('#form-materia').reset();
-  $('#mat-id').value = '';
-  $('#mat-color').value = COLORES[0];
-  $$('.color-swatch').forEach((s,i) => s.classList.toggle('is-selected', i===0));
-  $('#mat-horarios-list').innerHTML = '';
-  $('#mat-docs-list').innerHTML = '';
-  addHorarioRow();
-  $('#modal-materia').showModal();
-});
-
-$('#form-materia').addEventListener('submit', async () => {
-  const nombre = $('#mat-nombre').value.trim();
+$('#form-carpeta').addEventListener('submit', async () => {
+  const nombre = $('#carpeta-nombre').value.trim();
   if(!nombre) return;
-  const horarios = $$('.horario-row', $('#mat-horarios-list')).map(r => ({
-    dia: r.querySelector('.hr-dia').value,
-    inicio: r.querySelector('.hr-inicio').value,
-    fin: r.querySelector('.hr-fin').value,
-    aula: r.querySelector('.hr-aula').value.trim(),
-  })).filter(h => h.inicio && h.fin);
-  const docs = $$('.doc-row', $('#mat-docs-list')).map(r => ({
-    titulo: r.querySelector('.doc-titulo').value.trim(),
-    url: r.querySelector('.doc-url').value.trim(),
-  })).filter(d => d.titulo && d.url);
+  const links = $$('.link-row', $('#carpeta-links-list')).map(r => ({
+    titulo: r.querySelector('.link-titulo').value.trim(),
+    url: r.querySelector('.link-url').value.trim(),
+  })).filter(l => l.titulo && l.url);
 
-  const data = { nombre, color: $('#mat-color').value, horarios, docs };
-  const id = $('#mat-id').value;
-  const col = userDoc(currentUser.uid).collection('materias');
+  const data = { nombre, color: $('#carpeta-color').value, links };
+  const id = $('#carpeta-id').value;
+  const col = userDoc(currentUser.uid).collection('archivos');
   if(id) await col.doc(id).update(data);
   else await col.add(data);
 });
 
-let materiasExpandidas = new Set();
-
-function renderMaterias(){
-  const el = $('#materias-grid');
-  if(!state.materias.length){
-    el.innerHTML = '<p class="empty-note">Todavía no tenés materias acá. Se agregan solas cuando marcás una materia del plan como "Cursando" en Progreso, o agregala a mano con el botón de arriba.</p>';
+function renderArchivos(){
+  const el = $('#archivos-grid');
+  if(!state.archivos.length){
+    el.innerHTML = '<p class="empty-note">Todavía no tenés carpetas. Creá una con el botón de arriba: sirve para una materia (ej. "Anatomía" con sus resúmenes) o para links generales de la facultad.</p>';
     return;
   }
-  el.innerHTML = state.materias.map(m => {
-    const abierta = materiasExpandidas.has(m.id);
+  el.innerHTML = state.archivos.map(c => {
+    const abierta = carpetasExpandidas.has(c.id);
+    const links = c.links || [];
     return `
-    <div class="materia-card" style="border-top-color:${m.color}">
-      <button type="button" class="materia-card-header" data-toggle-mat="${m.id}">
-        <span class="materia-card-caret ${abierta?'is-open':''}">▾</span>
-        <span class="materia-name">${escapeHtml(m.nombre)}</span>
-        <span class="materia-horario-mini">${(m.horarios||[]).map(h => `${DIAS[Number(h.dia)-1]||''} ${h.inicio}`).join(' · ') || 'Sin horario cargado'}</span>
+    <div class="folder">
+      <button type="button" class="folder-head" data-toggle-carpeta="${c.id}" style="border-left-color:${c.color||'var(--marker)'}">
+        <span class="folder-caret ${abierta?'is-open':''}">▾</span>
+        <span class="folder-name">${escapeHtml(c.nombre)}</span>
+        <span class="folder-count">${links.length} ${links.length===1?'link':'links'}</span>
       </button>
-      <div class="materia-card-body ${abierta?'':'hidden'}">
-        ${(m.horarios||[]).map(h => `<div class="materia-horario">${DIAS[Number(h.dia)-1]||''} · ${h.inicio}–${h.fin}${h.aula?' · Aula '+escapeHtml(h.aula):''}</div>`).join('') || '<div class="materia-horario">Sin horario cargado</div>'}
-
-        <div class="card-subtitle">Resúmenes y documentos</div>
-        <div class="materia-docs">
-          ${(m.docs||[]).map(d => `
-            <a class="materia-doc-link" href="${escapeAttr(d.url)}" target="_blank" rel="noopener">
-              <span class="materia-doc-icon">📄</span>
-              <span class="materia-doc-title">${escapeHtml(d.titulo)}</span>
-              <span class="materia-doc-open">Abrir ↗</span>
+      <div class="folder-body ${abierta?'':'hidden'}">
+        <div class="folder-links">
+          ${links.map((l,i) => `
+            <a class="folder-link" href="${escapeAttr(l.url)}" target="_blank" rel="noopener">
+              <span class="folder-link-icon">↗</span>
+              <span class="folder-link-title">${escapeHtml(l.titulo)}</span>
+              <span class="folder-link-open">Abrir</span>
+              <button type="button" class="folder-link-rm" data-rm-link="${c.id}:${i}" title="Quitar link">✕</button>
             </a>
-          `).join('') || '<p class="empty-note">Sin resúmenes vinculados todavía.</p>'}
+          `).join('') || '<p class="empty-note">Sin links todavía.</p>'}
         </div>
-        <div class="materia-doc-add">
-          <input type="text" class="input materia-doc-add-titulo" data-id="${m.id}" placeholder="Título (ej: Módulo 1)">
-          <input type="url" class="input materia-doc-add-url" data-id="${m.id}" placeholder="Link (Google Docs, Drive, PDF...)">
-          <button type="button" class="btn btn-ghost btn-small materia-doc-add-btn" data-id="${m.id}">+ Agregar link</button>
-          <button type="button" class="btn btn-ghost btn-small materia-doc-create-btn">Crear Doc nuevo ↗</button>
-          <button type="button" class="btn btn-ghost btn-small materia-doc-drive-btn">Subir PDF a Drive ↗</button>
+        <div class="folder-add">
+          <input type="text" class="input folder-add-titulo" data-id="${c.id}" placeholder="Título">
+          <input type="url" class="input folder-add-url" data-id="${c.id}" placeholder="https://…">
+          <button type="button" class="btn btn-ghost btn-small folder-add-btn" data-id="${c.id}">+ Agregar</button>
         </div>
-        <p class="field-hint materia-doc-hint">Desde el celular: compartí el PDF a Drive, copiá el link y pegalo arriba.</p>
-
-        <div class="card-subtitle">Notas</div>
-        <textarea class="input materia-notas-input" data-id="${m.id}" rows="4" placeholder="Anotá lo que quieras sobre esta materia…">${escapeHtml(m.notas||'')}</textarea>
-
-        <div class="materia-card-actions">
-          <button class="btn btn-ghost btn-small" data-edit-mat="${m.id}">Editar horario</button>
-          <button class="btn btn-ghost btn-small" data-del-mat="${m.id}">Eliminar</button>
+        <div class="folder-actions">
+          <button class="btn btn-ghost btn-small" data-edit-carpeta="${c.id}">Editar carpeta</button>
+          <button class="btn btn-ghost btn-small" data-del-carpeta="${c.id}">Eliminar</button>
         </div>
       </div>
     </div>
   `;
   }).join('');
 
-  $$('[data-toggle-mat]').forEach(btn => btn.addEventListener('click', () => {
-    const id = btn.dataset.toggleMat;
-    if(materiasExpandidas.has(id)) materiasExpandidas.delete(id);
-    else materiasExpandidas.add(id);
-    renderMaterias();
+  $$('[data-toggle-carpeta]').forEach(btn => btn.addEventListener('click', () => {
+    const id = btn.dataset.toggleCarpeta;
+    if(carpetasExpandidas.has(id)) carpetasExpandidas.delete(id);
+    else carpetasExpandidas.add(id);
+    renderArchivos();
   }));
-  $$('[data-edit-mat]').forEach(btn => btn.addEventListener('click', () => editMateria(btn.dataset.editMat)));
-  $$('[data-del-mat]').forEach(btn => btn.addEventListener('click', () => delMateria(btn.dataset.delMat)));
-  $$('.materia-doc-add-btn').forEach(btn => btn.addEventListener('click', () => addDocInline(btn.dataset.id)));
-  $$('.materia-notas-input').forEach(ta => ta.addEventListener('blur', () => updateNotasMateria(ta.dataset.id, ta.value)));
-  $$('.materia-doc-create-btn').forEach(btn => btn.addEventListener('click', () => window.open('https://docs.google.com/document/create', '_blank')));
-  $$('.materia-doc-drive-btn').forEach(btn => btn.addEventListener('click', () => window.open('https://drive.google.com/drive/my-drive', '_blank')));
+  $$('[data-edit-carpeta]').forEach(btn => btn.addEventListener('click', () => editCarpeta(btn.dataset.editCarpeta)));
+  $$('[data-del-carpeta]').forEach(btn => btn.addEventListener('click', () => delCarpeta(btn.dataset.delCarpeta)));
+  $$('.folder-add-btn').forEach(btn => btn.addEventListener('click', () => addLinkInline(btn.dataset.id)));
+  $$('[data-rm-link]').forEach(btn => btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    const [id, idx] = btn.dataset.rmLink.split(':');
+    removeLinkInline(id, Number(idx));
+  }));
 }
 
-async function addDocInline(materiaId){
-  const tituloInp = $(`.materia-doc-add-titulo[data-id="${materiaId}"]`);
-  const urlInp = $(`.materia-doc-add-url[data-id="${materiaId}"]`);
+async function addLinkInline(carpetaId){
+  const tituloInp = $(`.folder-add-titulo[data-id="${carpetaId}"]`);
+  const urlInp = $(`.folder-add-url[data-id="${carpetaId}"]`);
   const titulo = tituloInp.value.trim();
   const url = urlInp.value.trim();
   if(!titulo || !url) return;
-  const m = state.materias.find(x => x.id === materiaId);
-  if(!m) return;
-  const docs = [...(m.docs||[]), { titulo, url }];
-  materiasExpandidas.add(materiaId);
-  await userDoc(currentUser.uid).collection('materias').doc(materiaId).update({ docs });
+  const c = state.archivos.find(x => x.id === carpetaId);
+  if(!c) return;
+  const links = [...(c.links||[]), { titulo, url }];
+  carpetasExpandidas.add(carpetaId);
+  await userDoc(currentUser.uid).collection('archivos').doc(carpetaId).update({ links });
 }
 
-async function updateNotasMateria(materiaId, notas){
-  materiasExpandidas.add(materiaId);
-  await userDoc(currentUser.uid).collection('materias').doc(materiaId).update({ notas });
+async function removeLinkInline(carpetaId, idx){
+  const c = state.archivos.find(x => x.id === carpetaId);
+  if(!c) return;
+  const links = (c.links||[]).filter((_, i) => i !== idx);
+  carpetasExpandidas.add(carpetaId);
+  await userDoc(currentUser.uid).collection('archivos').doc(carpetaId).update({ links });
 }
 
-function editMateria(id){
-  const m = state.materias.find(x => x.id === id);
-  if(!m) return;
-  $('#mat-id').value = m.id;
-  $('#mat-nombre').value = m.nombre;
-  $('#mat-color').value = m.color;
-  $$('.color-swatch').forEach(s => s.classList.toggle('is-selected', s.dataset.color === m.color));
-  $('#mat-horarios-list').innerHTML = '';
-  (m.horarios||[]).forEach(h => addHorarioRow(h));
-  if(!(m.horarios||[]).length) addHorarioRow();
-  $('#mat-docs-list').innerHTML = '';
-  (m.docs||[]).forEach(d => addDocRow(d));
-  $('#modal-materia').showModal();
+function editCarpeta(id){
+  const c = state.archivos.find(x => x.id === id);
+  if(!c) return;
+  $('#carpeta-id').value = c.id;
+  $('#carpeta-nombre').value = c.nombre;
+  $('#carpeta-color').value = c.color || COLORES[0];
+  markColorPicker('#carpeta-color-picker', c.color || COLORES[0]);
+  $('#carpeta-links-list').innerHTML = '';
+  (c.links||[]).forEach(l => addLinkRow(l));
+  if(!(c.links||[]).length) addLinkRow();
+  $('#modal-carpeta-title').textContent = 'Editar carpeta';
+  $('#modal-carpeta').showModal();
 }
-async function delMateria(id){
-  if(!confirm('¿Eliminar esta materia? También se quitará del calendario.')) return;
-  await userDoc(currentUser.uid).collection('materias').doc(id).delete();
+async function delCarpeta(id){
+  if(!confirm('¿Eliminar esta carpeta y todos sus links?')) return;
+  await userDoc(currentUser.uid).collection('archivos').doc(id).delete();
 }
 
 // ============================================================
@@ -634,6 +651,10 @@ $('#form-carrera').addEventListener('submit', async () => {
 $('#add-plan-materia-btn').addEventListener('click', () => {
   $('#form-plan-materia').reset();
   $('#plan-id').value = '';
+  const color = COLORES[state.plan.length % COLORES.length];
+  $('#plan-color').value = color;
+  markColorPicker('#plan-color-picker', color);
+  $('#plan-horarios-list').innerHTML = '';
   $('#modal-plan-materia').querySelector('.modal-title').textContent = 'Agregar materia al plan';
   buildCorrelativasSelect(null);
   $('#modal-plan-materia').showModal();
@@ -652,11 +673,19 @@ $('#form-plan-materia').addEventListener('submit', async () => {
   const nombre = $('#plan-nombre').value.trim();
   if(!nombre) return;
   const correlativas = $$('#plan-correlativas option:checked').map(o => o.value);
+  const horarios = $$('.horario-row', $('#plan-horarios-list')).map(r => ({
+    dia: r.querySelector('.hr-dia').value,
+    inicio: r.querySelector('.hr-inicio').value,
+    fin: r.querySelector('.hr-fin').value,
+    aula: r.querySelector('.hr-aula').value.trim(),
+  })).filter(h => h.inicio && h.fin);
   const data = {
     nombre,
     anio: Number($('#plan-anio').value),
     cuatrimestre: $('#plan-cuatrimestre').value,
     correlativas,
+    color: $('#plan-color').value,
+    horarios,
   };
   const id = $('#plan-id').value;
   const col = userDoc(currentUser.uid).collection('plan');
@@ -740,8 +769,8 @@ function planRowHtml(p, cuatriLabel){
       <button class="plan-tachar ${p.estado==='aprobada'?'is-aprobada':''}" data-id="${p.id}" title="Marcar aprobada">✓</button>
       <div class="plan-row-name">
         ${escapeHtml(p.nombre)}${p.codigo ? ` <span class="plan-codigo">${escapeHtml(p.codigo)}</span>` : ''}
-        <div class="plan-strike"></div>
         <div class="mini-item-meta">${cuatriLabel[p.cuatrimestre]||''}${locked?` · 🔒 requiere: ${pendientes.map(x=>escapeHtml(x.nombre)).join(', ')}`:''}${(!p.correlativas||!p.correlativas.length) && p.correlativasTexto ? ` · ref. PDF: ${escapeHtml(p.correlativasTexto)}` : ''}</div>
+        ${(p.horarios||[]).length ? `<div>${(p.horarios).map(h => `<span class="plan-horario-chip">${DIAS[Number(h.dia)-1]||''} ${h.inicio}–${h.fin}${h.aula?' · '+escapeHtml(h.aula):''}</span>`).join(' ')}</div>` : ''}
       </div>
       <select class="plan-estado-select" data-id="${p.id}">
         ${ESTADOS.map(e => `<option value="${e.v}" ${p.estado===e.v?'selected':''}>${e.label}</option>`).join('')}
@@ -769,30 +798,9 @@ async function toggleAprobada(id){
 async function updateEstado(id, estado){
   const p = state.plan.find(x => x.id === id);
   const data = { estado, nota: estado==='aprobada' ? (p?.nota ?? null) : null };
-  if(estado === 'cursando'){
-    data.materiaId = await ensureMateriaParaPlan(p);
-  }
   await userDoc(currentUser.uid).collection('plan').doc(id).update(data);
 }
 
-// al marcar una materia del plan como "cursando", se crea (o vincula, si ya
-// existe una con el mismo nombre) la materia correspondiente en Materias,
-// para que ahí se le carguen horarios/aula — Calendario e Inicio ya
-// muestran lo que haya en esa colección, sin lógica extra.
-async function ensureMateriaParaPlan(p){
-  if(!p) return null;
-  if(p.materiaId && state.materias.some(m => m.id === p.materiaId)) return p.materiaId;
-  const existente = state.materias.find(m => normTxt(m.nombre) === normTxt(p.nombre));
-  if(existente) return existente.id;
-  const ref = await userDoc(currentUser.uid).collection('materias').add({
-    nombre: p.nombre,
-    color: COLORES[state.materias.length % COLORES.length],
-    horarios: [],
-    docs: [],
-  });
-  materiasExpandidas.add(ref.id);
-  return ref.id;
-}
 async function updateNota(id, val){
   const n = val === '' ? null : Number(val);
   await userDoc(currentUser.uid).collection('plan').doc(id).update({ nota:n });
@@ -806,6 +814,11 @@ function editPlanMateria(id){
   $('#plan-cuatrimestre').value = p.cuatrimestre;
   buildCorrelativasSelect(p.id);
   Array.from($('#plan-correlativas').options).forEach(o => { o.selected = (p.correlativas||[]).includes(o.value); });
+  const color = p.color || COLORES[0];
+  $('#plan-color').value = color;
+  markColorPicker('#plan-color-picker', color);
+  $('#plan-horarios-list').innerHTML = '';
+  (p.horarios||[]).forEach(h => addPlanHorarioRow(h));
   $('#modal-plan-materia').querySelector('.modal-title').textContent = 'Editar materia del plan';
   $('#modal-plan-materia').showModal();
 }
@@ -1066,7 +1079,8 @@ $('#import-confirm-btn').addEventListener('click', async () => {
   $('#import-pdf-status').textContent = 'Importando…';
   try{
     const col = userDoc(currentUser.uid).collection('plan');
-    await Promise.all(seleccion.map(r => col.add({
+    const base = state.plan.length;
+    await Promise.all(seleccion.map((r, i) => col.add({
       nombre: r.nombre.trim(),
       anio: Number(r.anio),
       cuatrimestre: r.cuatrimestre,
@@ -1076,6 +1090,8 @@ $('#import-confirm-btn').addEventListener('click', async () => {
       codigo: r.codigo || null,
       correlativasTexto: r.correlativasTexto || null,
       orden: r.orden,
+      color: COLORES[(base + i) % COLORES.length],
+      horarios: [],
     })));
     $('#modal-import-plan').close();
   } catch(err){

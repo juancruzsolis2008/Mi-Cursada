@@ -54,16 +54,24 @@ o la extensión "Live Server" de VS Code. (Abrir el archivo directo con doble cl
 ```
 users/{uid}
   carrera: { nombre, universidad }
-  materias/{materiaId}   → { nombre, color, horarios: [{dia, inicio, fin, aula}], docs: [{titulo, url}] }
-  pendientes/{id}        → { titulo, materiaId, fecha, prioridad, link, completado }
-  plan/{id}              → { nombre, anio, cuatrimestre, estado, nota, correlativas: [planId,...] }
+  archivos/{id}    → { nombre, color, links: [{titulo, url}] }
+  pendientes/{id}  → { titulo, planId, fecha, prioridad, link, completado }
+  plan/{id}        → { nombre, anio, cuatrimestre, estado, nota, color,
+                       correlativas: [planId,...],
+                       horarios: [{dia, inicio, fin, aula}] }
 ```
 
-`dia` en los horarios va de `1` (lunes) a `6` (sábado).
+`dia` en los horarios va de `1` (lunes) a `7` (domingo). `inicio` y `fin` son `"HH:MM"`.
 `estado` en el plan: `no_cursada` · `cursando` · `regular` · `promocionada` · `aprobada`.
+
+La colección `archivos` (antes se llamaba `materias`) son carpetas de links sueltas: no
+tienen horario ni conexión con el calendario ni con el progreso. Sirven tanto para una
+materia puntual (ej. "Anatomía" con sus resúmenes) como para links generales de la
+facultad.
 
 ## Cosas a saber / próximos pasos posibles
 
-- El botón "Crear resumen nuevo ↗" abre un Google Doc en blanco (no lo ubica en una carpeta específica ni lo renombra automáticamente); eso requeriría sumar la API de Google Drive con permisos aparte. Por ahora, lo simple es crear el Doc, renombrarlo y pegar el link en la app.
-- El calendario semanal muestra los horarios fijos de cursada (8 a 22 hs, lunes a sábado). El calendario mensual muestra pendientes/entregas por día.
-- Las correlativas del plan son opcionales: si no las cargás, simplemente no se bloquea ninguna materia.
+- El horario de cursada se carga por materia del plan de estudios, en la pestaña **Progreso**. Si una materia tiene horario, aparece en el calendario semanal; si no, no aparece.
+- El botón "Abrir Google Docs ↗" abre un Doc en blanco (no lo ubica en una carpeta ni lo renombra); eso requeriría la API de Google Drive con permisos aparte. Por ahora: creá el Doc, renombralo y pegá el link en la carpeta.
+- El calendario semanal muestra los horarios de cursada (8 a 22 hs). El calendario mensual muestra pendientes/entregas por día.
+- Las correlativas del plan son opcionales: si no las cargás, no se bloquea ninguna materia.

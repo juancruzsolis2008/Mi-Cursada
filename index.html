@@ -7,7 +7,7 @@
 <link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,500;1,6..72,600&family=Inter:wght@400;500;600;700&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -49,8 +49,8 @@
       <button class="nav-item" data-view="pendientes">
         <span class="nav-icon">☑</span> Pendientes
       </button>
-      <button class="nav-item" data-view="materias">
-        <span class="nav-icon">✎</span> Materias
+      <button class="nav-item" data-view="archivos">
+        <span class="nav-icon">▤</span> Archivos
       </button>
       <button class="nav-item" data-view="progreso">
         <span class="nav-icon">◔</span> Progreso
@@ -79,7 +79,7 @@
       <header class="view-header">
         <div>
           <p class="view-eyebrow" id="today-date">—</p>
-          <h1 class="view-title">Hoy</h1>
+          <h1 class="view-title"><span class="hl">Hoy</span></h1>
         </div>
       </header>
 
@@ -153,19 +153,19 @@
       <div id="pendientes-groups"></div>
     </section>
 
-    <!-- ---------- MATERIAS ---------- -->
-    <section class="view" id="view-materias">
+    <!-- ---------- ARCHIVOS ---------- -->
+    <section class="view" id="view-archivos">
       <header class="view-header">
         <div>
-          <p class="view-eyebrow">Este cuatrimestre</p>
-          <h1 class="view-title">Materias</h1>
+          <p class="view-eyebrow">Carpetas de links</p>
+          <h1 class="view-title">Archivos</h1>
         </div>
         <div class="view-actions">
-          <button class="btn btn-primary" id="add-materia-btn">+ Nueva materia</button>
+          <button class="btn btn-primary" id="add-carpeta-btn">+ Nueva carpeta</button>
         </div>
       </header>
 
-      <div id="materias-grid" class="materias-grid"></div>
+      <div id="archivos-grid" class="archivos-grid"></div>
     </section>
 
     <!-- ---------- PROGRESO ---------- -->
@@ -228,33 +228,28 @@
   </form>
 </dialog>
 
-<dialog id="modal-materia" class="modal">
-  <form method="dialog" id="form-materia" class="modal-form">
-    <h2 class="modal-title">Nueva materia</h2>
-    <input type="hidden" id="mat-id">
-    <label class="field"><span>Nombre</span><input required id="mat-nombre" class="input" type="text" placeholder="Anatomía I"></label>
+<dialog id="modal-carpeta" class="modal">
+  <form method="dialog" id="form-carpeta" class="modal-form">
+    <h2 class="modal-title" id="modal-carpeta-title">Nueva carpeta</h2>
+    <input type="hidden" id="carpeta-id">
+    <label class="field"><span>Nombre</span><input required id="carpeta-nombre" class="input" type="text" placeholder="Anatomía · General · Plan de estudios"></label>
     <label class="field"><span>Color</span>
-      <div class="color-picker" id="mat-color-picker"></div>
-      <input type="hidden" id="mat-color" value="#2F6F5E">
+      <div class="color-picker" id="carpeta-color-picker"></div>
+      <input type="hidden" id="carpeta-color" value="#2F53C7">
     </label>
     <div class="field">
-      <span>Horarios de cursada</span>
-      <div id="mat-horarios-list" class="horarios-list"></div>
-      <button type="button" class="btn btn-ghost btn-small" id="add-horario-row">+ Agregar horario</button>
-    </div>
-    <div class="field">
-      <span>Resúmenes y apuntes (cualquier link: Google Docs, Drive, PDF...)</span>
-      <div id="mat-docs-list" class="docs-list"></div>
+      <span>Links (Google Docs, Drive, o cualquier URL)</span>
+      <div id="carpeta-links-list" class="links-list"></div>
       <div class="field-row">
-        <button type="button" class="btn btn-ghost btn-small" id="crear-doc-btn">Crear Doc nuevo ↗</button>
-        <button type="button" class="btn btn-ghost btn-small" id="subir-drive-btn">Subir PDF a Drive ↗</button>
-        <button type="button" class="btn btn-ghost btn-small" id="add-doc-row">+ Agregar link existente</button>
+        <button type="button" class="btn btn-ghost btn-small" id="carpeta-abrir-docs">Abrir Google Docs ↗</button>
+        <button type="button" class="btn btn-ghost btn-small" id="carpeta-abrir-drive">Abrir Drive ↗</button>
+        <button type="button" class="btn btn-ghost btn-small" id="add-link-row">+ Agregar link</button>
       </div>
-      <p class="field-hint">Para tener un PDF a mano: subilo a Drive (desde WhatsApp tocá compartir → Drive), copiá el link para compartir y pegalo acá.</p>
+      <p class="field-hint">Para un PDF: subilo a Drive (desde el celular, compartir → Drive), copiá el link para compartir y pegalo acá.</p>
     </div>
     <div class="modal-actions">
-      <button type="button" class="btn btn-ghost" data-close="modal-materia">Cancelar</button>
-      <button type="submit" class="btn btn-primary">Guardar materia</button>
+      <button type="button" class="btn btn-ghost" data-close="modal-carpeta">Cancelar</button>
+      <button type="submit" class="btn btn-primary">Guardar carpeta</button>
     </div>
   </form>
 </dialog>
@@ -283,6 +278,16 @@
       <select id="plan-correlativas" class="input select" multiple size="4"></select>
       <span class="field-hint">Mantené Ctrl (o Cmd) para elegir varias.</span>
     </label>
+    <label class="field"><span>Color (en el calendario)</span>
+      <div class="color-picker" id="plan-color-picker"></div>
+      <input type="hidden" id="plan-color" value="#2F53C7">
+    </label>
+    <div class="field">
+      <span>Horario de cursada (opcional)</span>
+      <div id="plan-horarios-list" class="horarios-list"></div>
+      <button type="button" class="btn btn-ghost btn-small" id="add-plan-horario-row">+ Agregar horario</button>
+      <p class="field-hint">Si cargás un horario, la materia aparece en el Calendario semanal. Si no, no aparece.</p>
+    </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" data-close="modal-plan-materia">Cancelar</button>
       <button type="submit" class="btn btn-primary">Guardar</button>
