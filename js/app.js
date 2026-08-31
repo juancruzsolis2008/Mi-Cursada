@@ -660,19 +660,27 @@ $('#add-plan-materia-btn').addEventListener('click', () => {
   $('#modal-plan-materia').showModal();
 });
 
-function buildCorrelativasSelect(excludeId){
-  const sel = $('#plan-correlativas');
-  sel.innerHTML = state.plan
+function buildCorrelativasSelect(excludeId, seleccion = []){
+  const box = $('#plan-correlativas');
+  const items = state.plan
     .filter(p => p.id !== excludeId)
-    .sort((a,b) => a.anio - b.anio || a.nombre.localeCompare(b.nombre))
-    .map(p => `<option value="${p.id}">${p.anio}° año — ${escapeHtml(p.nombre)}</option>`)
-    .join('');
+    .sort((a,b) => (a.anio||0) - (b.anio||0) || String(a.nombre).localeCompare(String(b.nombre)));
+  if(!items.length){
+    box.innerHTML = '<p class="empty-note">Todavía no hay otras materias en el plan.</p>';
+    return;
+  }
+  box.innerHTML = items.map(p => `
+    <label class="checklist-item">
+      <input type="checkbox" value="${p.id}" ${seleccion.includes(p.id)?'checked':''}>
+      <span>${p.anio ? p.anio + '° · ' : ''}${escapeHtml(p.nombre)}</span>
+    </label>
+  `).join('');
 }
 
 $('#form-plan-materia').addEventListener('submit', async () => {
   const nombre = $('#plan-nombre').value.trim();
   if(!nombre) return;
-  const correlativas = $$('#plan-correlativas option:checked').map(o => o.value);
+  const correlativas = $$('#plan-correlativas input:checked').map(cb => cb.value);
   const horarios = $$('.horario-row', $('#plan-horarios-list')).map(r => ({
     dia: r.querySelector('.hr-dia').value,
     inicio: r.querySelector('.hr-inicio').value,
@@ -812,8 +820,7 @@ function editPlanMateria(id){
   $('#plan-nombre').value = p.nombre;
   $('#plan-anio').value = p.anio;
   $('#plan-cuatrimestre').value = p.cuatrimestre;
-  buildCorrelativasSelect(p.id);
-  Array.from($('#plan-correlativas').options).forEach(o => { o.selected = (p.correlativas||[]).includes(o.value); });
+  buildCorrelativasSelect(p.id, p.correlativas || []);
   const color = p.color || COLORES[0];
   $('#plan-color').value = color;
   markColorPicker('#plan-color-picker', color);
